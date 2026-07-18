@@ -1,0 +1,11 @@
+<view class="page">
+  <scroll-view class="board-scroll" scroll-y scroll-top="{{scrollTop}}">
+    <canvas type="2d" id="pitchCanvas" class="pitch-canvas" style="width: {{canvasWidth}}px; height: {{boardHeight}}px;"></canvas>
+  </scroll-view>
+  <view class="time-bar">{{timeLabel}}</view>
+  <view class="toolbar">
+    <button class="tool" bindtap="clear">清空</button>
+    <button class="tool primary" bindtap="toggle">{{isRecording ? '暂停' : (hasStarted ? '继续' : '录音')}}</button>
+    <button class="tool" disabled="{{!hasStarted || saving}}" bindtap="save">{{saving ? '保存中' : '保存'}}</button>
+  </view>
+</view>

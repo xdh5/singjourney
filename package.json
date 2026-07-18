@@ -1,32 +1,23 @@
 {
-  "name": "tone-analyzer",
-  "version": "1.0.0",
+  "name": "tone",
+  "version": "2.0.0",
   "private": true,
-  "type": "module",
+  "workspaces": [
+    "apps/web",
+    "apps/wx",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "nuxi dev",
-    "build": "nuxi build",
-    "preview": "nuxi preview",
-    "generate": "nuxi generate",
-    "prisma:studio": "prisma studio",
-    "prisma:push": "prisma db push",
-    "prisma:migrate": "prisma migrate dev"
-  },
-  "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.8.0",
-    "@prisma/client": "^7.8.0",
-    "better-sqlite3": "^12.10.0",
-    "bootstrap": "^5.3.3",
-    "bootstrap-icons": "^1.13.1",
-    "nuxt": "^3.12.0",
-    "pitchfinder": "^2.3.4",
-    "prisma": "^7.8.0",
-    "vue": "^3.4.21"
+    "dev:web": "npm run build:core && npm run dev -w @tone/web",
+    "build:core": "npm run build -w @tone/pitch-core && npm run build -w @tone/curve-layout && npm run build -w @tone/contracts",
+    "build:web": "npm run build:core && npm run build -w @tone/web",
+    "build:wx": "npm run build:core && npm run build -w @tone/wx",
+    "build": "npm run build:core && npm run build -w @tone/web && npm run build -w @tone/wx",
+    "typecheck": "npx tsc -p apps/wx/tsconfig.json --noEmit && npm exec vue-tsc -- --noEmit -p apps/web/tsconfig.json",
+    "test": "npm run test -w @tone/pitch-core"
   },
   "devDependencies": {
-    "@nuxt/devtools": "^1.0.8",
-    "sass-embedded": "^1.100.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.0"
+    "vue-tsc": "^3.3.7"
   }
 }
