@@ -22,31 +22,44 @@ export function createCurveCommands(points: CurvePoint[], viewport: CurveViewpor
   const endTime = viewport.startTime + viewport.width / viewport.pixelsPerSecond + paddingSeconds
   const startIndex = lowerBound(points, viewport.startTime - paddingSeconds)
   const commands: CurveCommand[] = []
-  let previous: { x: number; y: number } | null = null
+  let segment: Array<{ x: number; y: number }> = []
+
+  const flushSegment = () => {
+    if (segment.length === 0) return
+    commands.push({ type: 'move', ...segment[0] })
+    if (segment.length === 2) {
+      commands.push({ type: 'line', ...segment[1] })
+    } else {
+      for (let index = 1; index < segment.length - 1; index += 1) {
+        const current = segment[index]
+        const next = segment[index + 1]
+        commands.push({
+          type: 'quad',
+          cx: current.x,
+          cy: current.y,
+          x: (current.x + next.x) / 2,
+          y: (current.y + next.y) / 2
+        })
+      }
+      commands.push({ type: 'line', ...segment[segment.length - 1] })
+    }
+    segment = []
+  }
 
   for (let index = startIndex; index < points.length; index += 1) {
     const point = points[index]
     if (point.time > endTime) break
     if (point.midi === null) {
-      if (previous) commands.push({ type: 'gap' })
-      previous = null
+      flushSegment()
+      if (commands.length > 0 && commands[commands.length - 1].type !== 'gap') commands.push({ type: 'gap' })
       continue
     }
-    const current = {
+    segment.push({
       x: (point.time - viewport.startTime) * viewport.pixelsPerSecond,
       y: midiToY(point.midi, viewport.maxMidi, viewport.rowHeight)
-    }
-    if (!previous) commands.push({ type: 'move', ...current })
-    else commands.push({
-      type: 'quad',
-      cx: previous.x,
-      cy: previous.y,
-      x: (previous.x + current.x) / 2,
-      y: (previous.y + current.y) / 2
     })
-    previous = current
   }
-  if (previous) commands.push({ type: 'line', ...previous })
+  flushSegment()
   return commands
 }
 

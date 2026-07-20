@@ -1,0 +1,7 @@
+services:
+  client-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    volumes:
+      - ./client/dist:/output

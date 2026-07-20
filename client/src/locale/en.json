@@ -1,0 +1,81 @@
+{
+  "app": {
+    "name": "Voice Trace Pitch Meter"
+  },
+  "nav": {
+    "home": "Voice Trace Pitch Meter",
+    "record": "Free Recording",
+    "recordDetail": "Recording Details",
+    "recordings": "Recordings",
+    "share": "Voice Practice Share"
+  },
+  "home": {
+    "subtitle": "See every rise and fall in your voice",
+    "freeRecording": "Free Recording",
+    "freeRecordingDescription": "View and save your pitch curve in real time",
+    "recordings": "Recordings",
+    "recordingsDescription": "Play and manage your recordings",
+    "accompaniment": "Accompanied Practice",
+    "accompanimentDescription": "Complete vocal exercises with accompaniment",
+    "practiceRecords": "Practice History",
+    "practiceRecordsDescription": "Review your progress and assessments",
+    "comingSoon": "Coming soon",
+    "comingSoonToast": "{name} is coming soon"
+  },
+  "record": {
+    "save": "Save",
+    "saving": "Saving",
+    "share": "Share",
+    "generating": "Preparing",
+    "delete": "Delete",
+    "clear": "Clear",
+    "pause": "Pause",
+    "play": "Play",
+    "download": "Download",
+    "stop": "Stop",
+    "continue": "Resume",
+    "stopped": "Stopped",
+    "record": "Record",
+    "defaultName": "Free Recording",
+    "freeRecordingMode": "Free Recording",
+    "playbackMode": "Recording Playback",
+    "aiTitle": "AI Voice Assessment",
+    "aiSubtitle": "Five dimensions including pitch and breath",
+    "aiComingSoon": "AI assessment is coming soon",
+    "shareMessage": "I recorded “{title}” with Voice Trace Pitch Meter",
+    "shareSummary": "I recorded “{title}” with Voice Trace Pitch Meter. Have a listen!",
+    "notFound": "Recording not found",
+    "saveOrClearFirst": "Save or clear the current recording first",
+    "microphonePermissionTitle": "Microphone access required",
+    "recordingStartFailed": "Could not start recording. Check your browser's microphone permission.",
+    "saved": "Saved on this device",
+    "saveFailed": "Could not save locally",
+    "deleteTitle": "Delete recording",
+    "deleteCurrentConfirm": "Delete this recording?",
+    "previewFailed": "Could not create a preview",
+    "exportFailed": "Export failed",
+    "generatingShare": "Preparing share",
+    "shareReady": "Ready. Tap Share again",
+    "shareFailed": "Could not create share"
+  },
+  "recordings": {
+    "localNotice": "Local storage reminder",
+    "wechatNotice": "Practice recordings are stored in WeChat on this device. Clearing WeChat data or changing devices may remove them. Download backups when needed.",
+    "webNotice": "Practice recordings are stored in this browser. Clearing browser data, using private browsing, or changing browsers may remove them. Download backups when needed.",
+    "appNotice": "Practice recordings are stored on this device. Uninstalling the app, clearing app data, or changing devices may remove them. Download backups when needed.",
+    "empty": "No recordings yet",
+    "start": "Start a free recording",
+    "delete": "Delete",
+    "deleteTitle": "Delete recording",
+    "deleteConfirm": "Delete “{name}”?"
+  },
+  "share": {
+    "loading": "Loading share…",
+    "play": "Play",
+    "pause": "Pause",
+    "expiry": "Shared content is available for 7 days",
+    "playFailed": "Could not play this recording",
+    "invalid": "Invalid share link",
+    "expired": "This share has expired or does not exist"
+  }
+}

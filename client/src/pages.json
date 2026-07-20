@@ -1,0 +1,26 @@
+{
+  "pages": [
+    {
+      "path": "pages/home",
+      "style": { "navigationBarTitleText": "%nav.home%" }
+    },
+    {
+      "path": "pages/record",
+      "style": { "navigationBarTitleText": "%app.name%", "disableScroll": true }
+    },
+    {
+      "path": "pages/recordings",
+      "style": { "navigationBarTitleText": "%nav.recordings%" }
+    },
+    {
+      "path": "pages/share",
+      "style": { "navigationBarTitleText": "%nav.share%" }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "%nav.home%",
+    "navigationBarBackgroundColor": "#356b5b",
+    "backgroundColor": "#ffffff"
+  }
+}

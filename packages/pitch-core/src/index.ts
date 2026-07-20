@@ -16,7 +16,10 @@ export type PitchEngineConfig = {
   minRms?: number
   maxMidiJump?: number
   smoothing?: number
+  smoothingSnapSemitones?: number
   releaseFrames?: number
+  fallbackDetector?: boolean
+  primaryDetector?: 'yin' | 'macleod'
 }
 
 const DEFAULTS = {
@@ -26,8 +29,13 @@ const DEFAULTS = {
   minRms: 0.0008,
   maxMidiJump: 10,
   smoothing: 0.78,
-  releaseFrames: 4
+  smoothingSnapSemitones: 2,
+  releaseFrames: 4,
+  fallbackDetector: true,
+  primaryDetector: 'yin' as const
 }
+
+const MIN_MACLEOD_PROBABILITY = 0.55
 
 export class PitchEngine {
   readonly config: Required<PitchEngineConfig>
@@ -66,12 +74,24 @@ export class PitchEngine {
     const rms = getRms(this.processed)
     if (rms < this.config.minRms) return this.release(time)
 
-    let frequency = this.yin(this.processed)
-    let confidence = frequency ? 1 : 0
-    if (!isFrequencyInRange(frequency, this.config.minMidi, this.config.maxMidi)) {
+    let frequency: number | null = null
+    let confidence = 0
+    if (this.config.primaryDetector === 'macleod') {
       const result = this.macleod(this.processed)
-      frequency = result?.probability >= 0.55 ? result.freq : null
+      frequency = result?.probability >= MIN_MACLEOD_PROBABILITY ? result.freq : null
       confidence = result?.probability || 0
+      if (this.config.fallbackDetector && !isFrequencyInRange(frequency, this.config.minMidi, this.config.maxMidi)) {
+        frequency = this.yin(this.processed)
+        confidence = frequency ? 1 : 0
+      }
+    } else {
+      frequency = this.yin(this.processed)
+      confidence = frequency ? 1 : 0
+      if (this.config.fallbackDetector && !isFrequencyInRange(frequency, this.config.minMidi, this.config.maxMidi)) {
+        const result = this.macleod(this.processed)
+        frequency = result?.probability >= MIN_MACLEOD_PROBABILITY ? result.freq : null
+        confidence = result?.probability || 0
+      }
     }
 
     if (!isFrequencyInRange(frequency, this.config.minMidi, this.config.maxMidi) || !frequency) {
@@ -84,7 +104,8 @@ export class PitchEngine {
     }
 
     this.missedFrames = 0
-    const smoothedMidi = this.lastMidi === null
+    const smoothingDifference = this.lastMidi === null ? 0 : Math.abs(midi - this.lastMidi)
+    const smoothedMidi = this.lastMidi === null || smoothingDifference >= this.config.smoothingSnapSemitones
       ? midi
       : this.lastMidi * this.config.smoothing + midi * (1 - this.config.smoothing)
     this.lastMidi = smoothedMidi
@@ -149,6 +170,15 @@ export function getRms(buffer: Float32Array) {
   let sum = 0
   for (const sample of buffer) sum += sample * sample
   return Math.sqrt(sum / buffer.length)
+}
+
+export function pcm16ToFloat32(buffer: ArrayBuffer) {
+  const view = new DataView(buffer)
+  const result = new Float32Array(Math.floor(buffer.byteLength / 2))
+  for (let index = 0; index < result.length; index += 1) {
+    result[index] = view.getInt16(index * 2, true) / 32768
+  }
+  return result
 }
 
 export function frequencyToMidi(frequency: number) {

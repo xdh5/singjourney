@@ -1,20 +1,26 @@
 {
-  "name": "tone",
+  "name": "shengji-pitch-meter",
   "version": "2.0.0",
   "private": true,
   "workspaces": [
-    "apps/web",
-    "apps/wx",
+    "client",
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "npm run build:core && npm run dev -w @tone/web",
-    "build:core": "npm run build -w @tone/pitch-core && npm run build -w @tone/curve-layout && npm run build -w @tone/contracts",
-    "build:web": "npm run build:core && npm run build -w @tone/web",
-    "build:wx": "npm run build:core && npm run build -w @tone/wx",
-    "build": "npm run build:core && npm run build -w @tone/web && npm run build -w @tone/wx",
-    "typecheck": "npx tsc -p apps/wx/tsconfig.json --noEmit && npm exec vue-tsc -- --noEmit -p apps/web/tsconfig.json",
-    "test": "npm run test -w @tone/pitch-core"
+    "version:check": "node scripts/release-version.mjs check",
+    "version:resolve": "node scripts/release-version.mjs resolve",
+    "version:prepare-client": "node scripts/release-version.mjs prepare-client",
+    "dev:client:web": "npm run dev:h5 -w @shengji/client",
+    "dev:client:wx": "npm run dev:mp-weixin -w @shengji/client",
+    "build:core": "npm run build -w @shengji/pitch-core && npm run build -w @shengji/curve-layout && npm run build -w @shengji/contracts",
+    "build:client:wx": "npm run build:core && npm run build:mp-weixin -w @shengji/client",
+    "build:client:web": "npm run build:core && npm run build:h5 -w @shengji/client",
+    "build:client:ios": "npm run build:core && npm run build:ios -w @shengji/client",
+    "build:client:android": "npm run build:core && npm run build:android -w @shengji/client",
+    "build:client": "npm run build:core && npm run build:h5 -w @shengji/client && npm run build:mp-weixin -w @shengji/client && npm run build:ios -w @shengji/client && npm run build:android -w @shengji/client",
+    "build": "npm run build:client",
+    "typecheck": "npm run typecheck -w @shengji/client",
+    "test": "npm run test -w @shengji/pitch-core"
   },
   "devDependencies": {
     "typescript": "^5.3.3",

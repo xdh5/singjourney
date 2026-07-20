@@ -1,6 +1,0 @@
-<view class="page">
-  <view class="header"><text class="brand">TONE</text><text class="title">随时看见你的声音</text><text class="subtitle">录音和曲线仅保存在当前微信</text></view>
-  <button class="card primary" bindtap="goRecord"><view class="icon">●</view><view class="copy"><text>自由录音</text><text class="small">实时查看并保存音高曲线</text></view><text>›</text></button>
-  <button class="card" bindtap="goRecordings"><view class="icon">▶</view><view class="copy"><text>录音记录</text><text class="small">播放或删除本机录音</text></view><text>›</text></button>
-  <text class="privacy">无账号 · 无上传 · 无服务端</text>
-</view>
