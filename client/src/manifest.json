@@ -1,0 +1,39 @@
+{
+  "name": "声迹音调仪",
+  "appid": "__UNI__SHENGJI",
+  "description": "声迹音调仪",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "app-plus": {
+    "usingComponents": true,
+    "compilerVersion": 3,
+    "splashscreen": {
+      "alwaysShowBeforeRender": false,
+      "waiting": false,
+      "autoclose": true,
+      "delay": 0
+    },
+    "modules": {},
+    "distribute": {
+      "ios": {
+        "privacyDescription": {
+          "NSMicrophoneUsageDescription": "用于录制声音并分析音高"
+        }
+      },
+      "sdkConfigs": {}
+    }
+  },
+  "mp-weixin": {
+    "appid": "touristappid",
+    "workers": "static/workers",
+    "setting": { "urlCheck": false },
+    "usingComponents": true,
+    "permission": {
+      "scope.record": { "desc": "用于录制声音并分析音高" }
+    }
+  },
+  "h5": { "title": "声迹音调仪" },
+  "uniStatistics": { "enable": false },
+  "vueVersion": "3"
+}

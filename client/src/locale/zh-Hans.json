@@ -1,0 +1,81 @@
+{
+  "app": {
+    "name": "声迹音调仪"
+  },
+  "nav": {
+    "home": "声迹音调仪",
+    "record": "自由录音",
+    "recordDetail": "录音详情",
+    "recordings": "录音记录",
+    "share": "练声分享"
+  },
+  "home": {
+    "subtitle": "捕捉声音，描摹每一次音高起伏",
+    "freeRecording": "自由录音",
+    "freeRecordingDescription": "实时查看并保存音高曲线",
+    "recordings": "录音记录",
+    "recordingsDescription": "播放或整理录音",
+    "accompaniment": "伴奏练声",
+    "accompanimentDescription": "跟随伴奏完成练声训练",
+    "practiceRecords": "练声记录",
+    "practiceRecordsDescription": "查看训练进度与测评结果",
+    "comingSoon": "待开发",
+    "comingSoonToast": "{name}待开发"
+  },
+  "record": {
+    "save": "保存",
+    "saving": "保存中",
+    "share": "分享",
+    "generating": "生成中",
+    "delete": "删除",
+    "clear": "清空",
+    "pause": "暂停",
+    "play": "播放",
+    "download": "下载",
+    "stop": "停止",
+    "continue": "继续",
+    "stopped": "已停止",
+    "record": "录音",
+    "defaultName": "自由录音",
+    "freeRecordingMode": "自由录音",
+    "playbackMode": "录音回放",
+    "aiTitle": "AI练声测评",
+    "aiSubtitle": "音准、气息等五维分析",
+    "aiComingSoon": "AI测评待开发",
+    "shareMessage": "我在声迹音调仪录制了「{title}」",
+    "shareSummary": "我在声迹音调仪录制了「{title}」，快来听听吧",
+    "notFound": "录音记录不存在",
+    "saveOrClearFirst": "请先保存或清空",
+    "microphonePermissionTitle": "需要麦克风权限",
+    "recordingStartFailed": "无法开始录音，请检查浏览器的麦克风权限。",
+    "saved": "已保存到本机",
+    "saveFailed": "本地保存失败",
+    "deleteTitle": "删除录音",
+    "deleteCurrentConfirm": "确定删除这条录音吗？",
+    "previewFailed": "暂时无法生成试听",
+    "exportFailed": "导出失败",
+    "generatingShare": "生成分享中",
+    "shareReady": "已生成，再点一次分享",
+    "shareFailed": "生成分享失败"
+  },
+  "recordings": {
+    "localNotice": "本地记录提醒",
+    "wechatNotice": "练声记录保存在当前微信中。清理微信数据或更换设备后可能丢失，请及时下载备份。",
+    "webNotice": "练声记录保存在当前浏览器中。清理浏览器数据、使用无痕模式或更换浏览器后可能丢失，请及时下载备份。",
+    "appNotice": "练声记录保存在当前设备中。卸载应用、清理应用数据或更换设备后可能丢失，请及时下载备份。",
+    "empty": "还没有录音",
+    "start": "开始自由录音",
+    "delete": "删除",
+    "deleteTitle": "删除录音",
+    "deleteConfirm": "确定删除“{name}”吗？"
+  },
+  "share": {
+    "loading": "正在加载分享…",
+    "play": "播放",
+    "pause": "暂停",
+    "expiry": "分享内容仅保留7天",
+    "playFailed": "录音播放失败",
+    "invalid": "分享链接无效",
+    "expired": "分享已失效或不存在"
+  }
+}

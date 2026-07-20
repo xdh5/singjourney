@@ -1,0 +1,126 @@
+name: Web CI
+
+on:
+  pull_request:
+    paths:
+      - "client/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".npmrc"
+      - "Dockerfile.client"
+      - ".github/workflows/web-ci.yml"
+  push:
+    branches: [main]
+    tags:
+      - "web-v*"
+    paths:
+      - "client/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".npmrc"
+      - "Dockerfile.client"
+      - ".github/workflows/web-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve Web release version
+        id: release
+        shell: bash
+        run: |
+          tag=""
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then tag="$GITHUB_REF_NAME"; fi
+          node scripts/release-version.mjs github-output web "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Type-check, test, and build Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          target: web-artifact
+          push: false
+          build-args: |
+            CLIENT_BUILD_SCRIPT=build:client:web
+            CLIENT_RUN_CHECKS=true
+            CLIENT_RELEASE_COMPONENT=web
+            CLIENT_RELEASE_TAG=${{ github.ref_type == 'tag' && github.ref_name || '' }}
+            CLIENT_RELEASE_VERSION=${{ steps.release.outputs.version }}
+          outputs: type=local,dest=client/dist/h5
+          cache-from: type=gha,scope=web-ci
+          cache-to: type=gha,mode=max,scope=web-ci
+
+      - name: Upload Web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voicetrace-web-${{ github.sha }}
+          path: client/dist/h5
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: verify-and-build
+    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/web-v')) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST || '47.116.4.25' }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'root' }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/voicetrace' }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY || secrets.ECS_SSH_KEY }}
+    steps:
+      - name: Download Web artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: voicetrace-web-${{ github.sha }}
+          path: web-dist
+
+      - name: Validate deployment configuration
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "Missing Actions variable: DEPLOY_HOST"; exit 1; }
+          test -n "$DEPLOY_SSH_PRIVATE_KEY" || { echo "Missing Actions secret: DEPLOY_SSH_PRIVATE_KEY"; exit 1; }
+
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload and activate Web release
+        run: |
+          tar -C web-dist -czf web-release.tar.gz .
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/deploy_key web-release.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/voicetrace-web-${GITHUB_SHA}.tar.gz"
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' RELEASE_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          release_root="$DEPLOY_PATH/web/releases"
+          release_path="$release_root/$RELEASE_SHA"
+          current_path="$DEPLOY_PATH/web/current"
+          archive_path="/tmp/voicetrace-web-$RELEASE_SHA.tar.gz"
+          mkdir -p "$release_path"
+          tar -xzf "$archive_path" -C "$release_path"
+          rm -f "$archive_path"
+          if [ -e "$current_path" ] && [ ! -L "$current_path" ]; then
+            mv "$current_path" "$DEPLOY_PATH/web/pre-cd-$(date +%Y%m%d%H%M%S)"
+          fi
+          ln -sfn "$release_path" "$current_path"
+          REMOTE
