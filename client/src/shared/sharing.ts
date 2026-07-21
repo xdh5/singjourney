@@ -1,5 +1,5 @@
-import type { StoredPitchPoint } from '@shengji/contracts'
-import { resolveApiUrl } from '../config/runtime'
+import type { StoredPitchPoint } from '@singjourney/contracts'
+import { resolveApiUrl } from '../config/endpoints'
 import type { ShareAudioPayload } from '../platform/share-audio'
 import { uploadShareAudio } from '../platform/share-audio'
 

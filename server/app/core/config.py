@@ -5,23 +5,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Shengji API"
+    app_name: str = "SingJourney API"
     environment: str = "development"
     api_prefix: str = "/api/v1"
-    database_url: str = "sqlite:///./data/shengji.db"
+    database_url: str = "sqlite:///./data/singjourney.db"
     storage_root: Path = Path("./data/media")
     storage_backend: str = "local"
     r2_account_id: str = ""
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
     r2_bucket_name: str = ""
-    deployment_region: str = "cn"
-    client_config_version: int = 1
-    client_config_ttl_seconds: int = 3600
-    public_api_base_url: str = "https://tone.cyberlab.bond/api/v1"
-    public_share_base_url: str = "https://tone.cyberlab.bond"
-    public_media_base_url: str = "https://tone.cyberlab.bond/api/v1"
-    cors_origins: str = "https://tone.cyberlab.bond,http://localhost:5173,http://localhost:3000"
+    public_api_base_url: str = "https://singjourney.com/api/v1"
+    public_share_base_url: str = "https://singjourney.com"
+    cors_origins: str = "https://singjourney.com,http://localhost:5173,http://localhost:3000"
     share_retention_days: int = 7
     share_cleanup_interval_seconds: int = 60 * 60
     share_upload_url_ttl_seconds: int = 15 * 60
@@ -30,7 +26,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_prefix="SHENGJI_",
+        env_prefix="SINGJOURNEY_",
         extra="ignore",
     )
 

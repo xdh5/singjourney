@@ -8,7 +8,7 @@ from app.storage.r2 import R2Storage
 def get_object_storage() -> R2Storage:
     settings = get_settings()
     if settings.storage_backend != R2Storage.provider:
-        raise RuntimeError("Direct sharing requires SHENGJI_STORAGE_BACKEND=cloudflare_r2")
+        raise RuntimeError("Direct sharing requires SINGJOURNEY_STORAGE_BACKEND=cloudflare_r2")
     return R2Storage(settings)
 
 

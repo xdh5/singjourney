@@ -21,7 +21,7 @@
 import { nextTick, ref } from 'vue'
 import { onLoad, onShareAppMessage, onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { resolveApiUrl } from '../config/runtime'
+import { resolveApiUrl } from '../config/endpoints'
 import { setPageTitle } from '../i18n'
 import { formatTime } from '../shared/recordings'
 

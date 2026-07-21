@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { onLaunch } from '@dcloudio/uni-app'
-import { initializeRuntimeConfig } from './config/runtime'
 import { removeLegacyWebAppCache } from './platform/legacy-pwa'
 
 onLaunch(() => {
   void removeLegacyWebAppCache()
-  void initializeRuntimeConfig()
 })
 </script>
 

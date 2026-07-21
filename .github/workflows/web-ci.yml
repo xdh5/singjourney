@@ -70,7 +70,7 @@ jobs:
       - name: Upload Web artifact
         uses: actions/upload-artifact@v4
         with:
-          name: voicetrace-web-${{ github.sha }}
+          name: singjourney-web-${{ github.sha }}
           path: client/dist/h5
           if-no-files-found: error
           retention-days: 7
@@ -81,16 +81,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      DEPLOY_HOST: ${{ vars.DEPLOY_HOST || '47.116.4.25' }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
       DEPLOY_USER: ${{ vars.DEPLOY_USER || 'root' }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/voicetrace' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/singjourney' }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY || secrets.ECS_SSH_KEY }}
     steps:
       - name: Download Web artifact
         uses: actions/download-artifact@v5
         with:
-          name: voicetrace-web-${{ github.sha }}
+          name: singjourney-web-${{ github.sha }}
           path: web-dist
 
       - name: Validate deployment configuration
@@ -108,14 +108,14 @@ jobs:
       - name: Upload and activate Web release
         run: |
           tar -C web-dist -czf web-release.tar.gz .
-          scp -P "$DEPLOY_PORT" -i ~/.ssh/deploy_key web-release.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/voicetrace-web-${GITHUB_SHA}.tar.gz"
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/deploy_key web-release.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/singjourney-web-${GITHUB_SHA}.tar.gz"
           ssh -p "$DEPLOY_PORT" -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
             "DEPLOY_PATH='$DEPLOY_PATH' RELEASE_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
           release_root="$DEPLOY_PATH/web/releases"
           release_path="$release_root/$RELEASE_SHA"
           current_path="$DEPLOY_PATH/web/current"
-          archive_path="/tmp/voicetrace-web-$RELEASE_SHA.tar.gz"
+          archive_path="/tmp/singjourney-web-$RELEASE_SHA.tar.gz"
           mkdir -p "$release_path"
           tar -xzf "$archive_path" -C "$release_path"
           rm -f "$archive_path"

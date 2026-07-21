@@ -2,7 +2,7 @@
 
 当前服务端只开放健康检查和 7 天有效的录音分享接口。账号、云端录音、伴奏、练声统计与 AI 测评只有数据库边界，尚未开放接口。
 
-客户端只内置稳定配置入口 `https://tone.cyberlab.bond/api/v1/client-config`。API、分享和媒体域名由该接口下发并由客户端缓存，页面与业务模块不得写死服务域名。
+客户端统一使用 `https://singjourney.com`，公开端点集中定义，页面与业务模块不得写死服务域名。
 
 ## 目录
 
@@ -63,24 +63,12 @@ docker compose -f compose.server.yml exec api python -m app.jobs.cleanup_expired
 - `GET /api/v1/shares/{id}`：获取公开分享数据。
 - `GET /api/v1/shares/{id}/audio`：校验有效期后跳转至短期 R2 GET 地址，API 不转发音频字节。
 - `DELETE /api/v1/shares/{id}`：凭创建时返回的删除令牌提前删除。
-- `GET /api/v1/client-config`：返回客户端当前使用的 API、分享和媒体地址。
 
 ## Cloudflare R2 配置
 
-1. 创建私有 Bucket `shengji-share-audio`，并给 `shares/` 前缀配置 7 天删除生命周期规则。
+1. 创建私有 Bucket `singjourney-share-audio`，并给 `shares/` 前缀配置 7 天删除生命周期规则。
 2. 创建仅限该 Bucket 的 Object Read & Write API Token。
-3. 在部署环境设置 `SHENGJI_STORAGE_BACKEND=cloudflare_r2`、Account ID、Access Key ID、Secret Access Key 和 Bucket 名称；密钥不得提交到 Git。
+3. 在部署环境设置 `SINGJOURNEY_STORAGE_BACKEND=cloudflare_r2`、Account ID、Access Key ID、Secret Access Key 和 Bucket 名称；密钥不得提交到 Git。
 4. Web 直传需要在 Bucket CORS 中允许正式 Web 域名执行 `PUT`，并允许 `Content-Type` 请求头。
 
 创建接口使用 JSON 提交标题、时长、曲线及音频大小/类型；音频随后通过短期 PUT 地址直传 R2。当前单次音频上限为 25 MiB。
-
-## 域名迁移
-
-当前三个公开地址都使用 `tone.cyberlab.bond`。未来切换品牌域名时：
-
-1. 保留旧域名的配置入口和反向代理，供旧版客户端继续访问。
-2. 修改 `SHENGJI_PUBLIC_API_BASE_URL`、`SHENGJI_PUBLIC_SHARE_BASE_URL` 和 `SHENGJI_PUBLIC_MEDIA_BASE_URL`。
-3. 提高 `SHENGJI_CLIENT_CONFIG_VERSION` 并重启 API。
-4. 新创建的分享会返回新域名；已经复制出去的旧链接继续访问旧域名，直至分享过期。
-
-旧域名必须至少保留到旧客户端完成升级。分享域名可以只保留到最后一条旧分享过期，但旧版客户端的配置入口应保留更长时间。

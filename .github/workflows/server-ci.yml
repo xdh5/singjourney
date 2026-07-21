@@ -33,25 +33,24 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_DB: shengji_ci
-          POSTGRES_USER: shengji_ci
-          POSTGRES_PASSWORD: shengji_ci
+          POSTGRES_DB: singjourney_ci
+          POSTGRES_USER: singjourney_ci
+          POSTGRES_PASSWORD: singjourney_ci
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U shengji_ci -d shengji_ci"
+          --health-cmd "pg_isready -U singjourney_ci -d singjourney_ci"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
     env:
-      SHENGJI_ENVIRONMENT: test
-      SHENGJI_DATABASE_URL: postgresql+psycopg://shengji_ci:shengji_ci@127.0.0.1:5432/shengji_ci
-      SHENGJI_STORAGE_BACKEND: local
-      SHENGJI_STORAGE_ROOT: /tmp/shengji-media
-      SHENGJI_PUBLIC_API_BASE_URL: https://example.test/api/v1
-      SHENGJI_PUBLIC_SHARE_BASE_URL: https://example.test
-      SHENGJI_PUBLIC_MEDIA_BASE_URL: https://example.test/api/v1
-      SHENGJI_CORS_ORIGINS: https://example.test
+      SINGJOURNEY_ENVIRONMENT: test
+      SINGJOURNEY_DATABASE_URL: postgresql+psycopg://singjourney_ci:singjourney_ci@127.0.0.1:5432/singjourney_ci
+      SINGJOURNEY_STORAGE_BACKEND: local
+      SINGJOURNEY_STORAGE_ROOT: /tmp/singjourney-media
+      SINGJOURNEY_PUBLIC_API_BASE_URL: https://example.test/api/v1
+      SINGJOURNEY_PUBLIC_SHARE_BASE_URL: https://example.test
+      SINGJOURNEY_CORS_ORIGINS: https://example.test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -95,7 +94,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Build production server image
-        run: docker build --file Dockerfile.server --tag voicetrace-server:ci .
+        run: docker build --file Dockerfile.server --tag singjourney-server:ci .
 
   deploy:
     needs: [verify, image]
@@ -103,20 +102,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      DEPLOY_HOST: ${{ vars.DEPLOY_HOST || '47.116.4.25' }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
       DEPLOY_USER: ${{ vars.DEPLOY_USER || 'root' }}
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/voicetrace' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/singjourney' }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY || secrets.ECS_SSH_KEY }}
-      SHENGJI_DATABASE_PASSWORD: ${{ secrets.SHENGJI_DATABASE_PASSWORD }}
-      SHENGJI_R2_ACCOUNT_ID: ${{ vars.SHENGJI_R2_ACCOUNT_ID }}
-      SHENGJI_R2_ACCESS_KEY_ID: ${{ secrets.SHENGJI_R2_ACCESS_KEY_ID }}
-      SHENGJI_R2_SECRET_ACCESS_KEY: ${{ secrets.SHENGJI_R2_SECRET_ACCESS_KEY }}
-      SHENGJI_R2_BUCKET_NAME: ${{ vars.SHENGJI_R2_BUCKET_NAME || 'shengji-share-audio' }}
-      SHENGJI_PUBLIC_API_BASE_URL: ${{ vars.SHENGJI_PUBLIC_API_BASE_URL || 'https://tone.cyberlab.bond/api/v1' }}
-      SHENGJI_PUBLIC_SHARE_BASE_URL: ${{ vars.SHENGJI_PUBLIC_SHARE_BASE_URL || 'https://tone.cyberlab.bond' }}
-      SHENGJI_PUBLIC_MEDIA_BASE_URL: ${{ vars.SHENGJI_PUBLIC_MEDIA_BASE_URL || 'https://tone.cyberlab.bond/api/v1' }}
-      SHENGJI_CORS_ORIGINS: ${{ vars.SHENGJI_CORS_ORIGINS || 'https://tone.cyberlab.bond' }}
+      SINGJOURNEY_DATABASE_PASSWORD: ${{ secrets.SINGJOURNEY_DATABASE_PASSWORD }}
+      SINGJOURNEY_R2_ACCOUNT_ID: ${{ vars.SINGJOURNEY_R2_ACCOUNT_ID }}
+      SINGJOURNEY_R2_ACCESS_KEY_ID: ${{ secrets.SINGJOURNEY_R2_ACCESS_KEY_ID }}
+      SINGJOURNEY_R2_SECRET_ACCESS_KEY: ${{ secrets.SINGJOURNEY_R2_SECRET_ACCESS_KEY }}
+      SINGJOURNEY_R2_BUCKET_NAME: ${{ vars.SINGJOURNEY_R2_BUCKET_NAME || 'singjourney-share-audio' }}
+      SINGJOURNEY_PUBLIC_API_BASE_URL: ${{ vars.SINGJOURNEY_PUBLIC_API_BASE_URL || 'https://singjourney.com/api/v1' }}
+      SINGJOURNEY_PUBLIC_SHARE_BASE_URL: ${{ vars.SINGJOURNEY_PUBLIC_SHARE_BASE_URL || 'https://singjourney.com' }}
+      SINGJOURNEY_CORS_ORIGINS: ${{ vars.SINGJOURNEY_CORS_ORIGINS || 'https://singjourney.com' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -125,10 +123,10 @@ jobs:
         run: |
           test -n "$DEPLOY_HOST" || { echo "Missing Actions variable: DEPLOY_HOST"; exit 1; }
           test -n "$DEPLOY_SSH_PRIVATE_KEY" || { echo "Missing Actions secret: DEPLOY_SSH_PRIVATE_KEY"; exit 1; }
-          test -n "$SHENGJI_DATABASE_PASSWORD" || { echo "Missing Actions secret: SHENGJI_DATABASE_PASSWORD"; exit 1; }
-          test -n "$SHENGJI_R2_ACCOUNT_ID" || { echo "Missing Actions variable: SHENGJI_R2_ACCOUNT_ID"; exit 1; }
-          test -n "$SHENGJI_R2_ACCESS_KEY_ID" || { echo "Missing Actions secret: SHENGJI_R2_ACCESS_KEY_ID"; exit 1; }
-          test -n "$SHENGJI_R2_SECRET_ACCESS_KEY" || { echo "Missing Actions secret: SHENGJI_R2_SECRET_ACCESS_KEY"; exit 1; }
+          test -n "$SINGJOURNEY_DATABASE_PASSWORD" || { echo "Missing Actions secret: SINGJOURNEY_DATABASE_PASSWORD"; exit 1; }
+          test -n "$SINGJOURNEY_R2_ACCOUNT_ID" || { echo "Missing Actions variable: SINGJOURNEY_R2_ACCOUNT_ID"; exit 1; }
+          test -n "$SINGJOURNEY_R2_ACCESS_KEY_ID" || { echo "Missing Actions secret: SINGJOURNEY_R2_ACCESS_KEY_ID"; exit 1; }
+          test -n "$SINGJOURNEY_R2_SECRET_ACCESS_KEY" || { echo "Missing Actions secret: SINGJOURNEY_R2_SECRET_ACCESS_KEY"; exit 1; }
 
       - name: Configure SSH
         run: |
@@ -143,22 +141,21 @@ jobs:
       - name: Create protected server environment
         run: |
           umask 077
-          encoded_database_password="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SHENGJI_DATABASE_PASSWORD"], safe=""))')"
+          encoded_database_password="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SINGJOURNEY_DATABASE_PASSWORD"], safe=""))')"
           {
-            printf 'SHENGJI_ENVIRONMENT=production\n'
-            printf 'SHENGJI_DATABASE_PASSWORD=%s\n' "$SHENGJI_DATABASE_PASSWORD"
-            printf 'SHENGJI_DATABASE_URL=postgresql+psycopg://shengji:%s@db:5432/shengji\n' "$encoded_database_password"
-            printf 'SHENGJI_STORAGE_BACKEND=cloudflare_r2\n'
-            printf 'SHENGJI_STORAGE_ROOT=/data/media\n'
-            printf 'SHENGJI_R2_ACCOUNT_ID=%s\n' "$SHENGJI_R2_ACCOUNT_ID"
-            printf 'SHENGJI_R2_ACCESS_KEY_ID=%s\n' "$SHENGJI_R2_ACCESS_KEY_ID"
-            printf 'SHENGJI_R2_SECRET_ACCESS_KEY=%s\n' "$SHENGJI_R2_SECRET_ACCESS_KEY"
-            printf 'SHENGJI_R2_BUCKET_NAME=%s\n' "$SHENGJI_R2_BUCKET_NAME"
-            printf 'SHENGJI_PUBLIC_API_BASE_URL=%s\n' "$SHENGJI_PUBLIC_API_BASE_URL"
-            printf 'SHENGJI_PUBLIC_SHARE_BASE_URL=%s\n' "$SHENGJI_PUBLIC_SHARE_BASE_URL"
-            printf 'SHENGJI_PUBLIC_MEDIA_BASE_URL=%s\n' "$SHENGJI_PUBLIC_MEDIA_BASE_URL"
-            printf 'SHENGJI_CORS_ORIGINS=%s\n' "$SHENGJI_CORS_ORIGINS"
-            printf 'SHENGJI_DATA_PATH=%s/data\n' "$DEPLOY_PATH"
+            printf 'SINGJOURNEY_ENVIRONMENT=production\n'
+            printf 'SINGJOURNEY_DATABASE_PASSWORD=%s\n' "$SINGJOURNEY_DATABASE_PASSWORD"
+            printf 'SINGJOURNEY_DATABASE_URL=postgresql+psycopg://singjourney:%s@db:5432/singjourney\n' "$encoded_database_password"
+            printf 'SINGJOURNEY_STORAGE_BACKEND=cloudflare_r2\n'
+            printf 'SINGJOURNEY_STORAGE_ROOT=/data/media\n'
+            printf 'SINGJOURNEY_R2_ACCOUNT_ID=%s\n' "$SINGJOURNEY_R2_ACCOUNT_ID"
+            printf 'SINGJOURNEY_R2_ACCESS_KEY_ID=%s\n' "$SINGJOURNEY_R2_ACCESS_KEY_ID"
+            printf 'SINGJOURNEY_R2_SECRET_ACCESS_KEY=%s\n' "$SINGJOURNEY_R2_SECRET_ACCESS_KEY"
+            printf 'SINGJOURNEY_R2_BUCKET_NAME=%s\n' "$SINGJOURNEY_R2_BUCKET_NAME"
+            printf 'SINGJOURNEY_PUBLIC_API_BASE_URL=%s\n' "$SINGJOURNEY_PUBLIC_API_BASE_URL"
+            printf 'SINGJOURNEY_PUBLIC_SHARE_BASE_URL=%s\n' "$SINGJOURNEY_PUBLIC_SHARE_BASE_URL"
+            printf 'SINGJOURNEY_CORS_ORIGINS=%s\n' "$SINGJOURNEY_CORS_ORIGINS"
+            printf 'SINGJOURNEY_DATA_PATH=%s/data\n' "$DEPLOY_PATH"
           } > server-deploy.env
 
       - name: Upload and activate server release
@@ -182,17 +179,17 @@ jobs:
           fi
           ln -sfn "$release_path" "$current_path"
           cd "$current_path"
-          docker compose --project-name voicetrace --env-file "$environment_path" \
+          docker compose --project-name singjourney --env-file "$environment_path" \
             -f compose.server.yml up -d --build --remove-orphans
           for attempt in $(seq 1 18); do
-            if docker compose --project-name voicetrace --env-file "$environment_path" \
+            if docker compose --project-name singjourney --env-file "$environment_path" \
               -f compose.server.yml exec -T api python -c \
               "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"; then
               exit 0
             fi
             sleep 5
           done
-          docker compose --project-name voicetrace --env-file "$environment_path" \
+          docker compose --project-name singjourney --env-file "$environment_path" \
             -f compose.server.yml logs --tail=100 api
           exit 1
           REMOTE

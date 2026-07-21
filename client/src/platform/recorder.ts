@@ -1,3 +1,5 @@
+import { MAX_RECORDING_DURATION_SECONDS } from '@singjourney/contracts'
+
 export type RecorderStopResult = {
   tempFilePath: string
   blob?: Blob
@@ -43,6 +45,7 @@ const WEB_ANALYSIS_INTERVAL_MS = 90
 const ANALYSIS_SAMPLE_RATE = 16000
 const DEFAULT_ANALYSIS_FRAME_SIZE = 1024
 const WEB_ANALYSIS_FRAME_SIZE = 2048
+const MAX_RECORDING_DURATION_MS = MAX_RECORDING_DURATION_SECONDS * 1000
 
 export const recorderAnalysisConfig = {
   sampleRate: ANALYSIS_SAMPLE_RATE,
@@ -78,11 +81,11 @@ export async function startRecorder() {
     return
   }
   if (appPlatform) {
-    manager.start({ duration: 600000, sampleRate: 16000, format: 'wav' })
+    manager.start({ duration: MAX_RECORDING_DURATION_MS, sampleRate: 16000, format: 'wav' })
     return
   }
   manager.start({
-    duration: 600000,
+    duration: MAX_RECORDING_DURATION_MS,
     sampleRate: 16000,
     numberOfChannels: 1,
     encodeBitRate: 96000,

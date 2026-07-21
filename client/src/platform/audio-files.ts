@@ -7,7 +7,7 @@ export async function persistAudio(tempFilePath: string, id: string) {
   const pcm = await new Promise<ArrayBuffer>((resolve, reject) => {
     fs.readFile({ filePath: tempFilePath, success: (result: { data: ArrayBuffer }) => resolve(result.data), fail: reject })
   })
-  const filePath = `${wxApi.env.USER_DATA_PATH}/shengji-${id}.wav`
+  const filePath = `${wxApi.env.USER_DATA_PATH}/singjourney-${id}.wav`
   await new Promise<void>((resolve, reject) => {
     fs.writeFile({ filePath, data: wrapPcmAsWav(pcm, 16000), success: () => resolve(), fail: reject })
   })
@@ -23,7 +23,7 @@ export async function persistAudio(tempFilePath: string, id: string) {
 export async function createPcmPreview(pcm: ArrayBuffer) {
   // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
-  const filePath = `${wxApi.env.USER_DATA_PATH}/shengji-preview-${Date.now()}.wav`
+  const filePath = `${wxApi.env.USER_DATA_PATH}/singjourney-preview-${Date.now()}.wav`
   await new Promise<void>((resolve, reject) => {
     wxApi.getFileSystemManager().writeFile({
       filePath,

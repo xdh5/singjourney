@@ -17,7 +17,7 @@ await build({
     lib: {
       entry: entryFile,
       formats: ['iife'],
-      name: 'VoiceTracePitchWorker',
+      name: 'SingJourneyPitchWorker',
       fileName: () => 'pitch.js'
     }
   }

@@ -1,5 +1,5 @@
 {
-  "name": "shengji-pitch-meter",
+  "name": "singjourney-pitch-meter",
   "version": "2.0.0",
   "private": true,
   "workspaces": [
@@ -10,17 +10,17 @@
     "version:check": "node scripts/release-version.mjs check",
     "version:resolve": "node scripts/release-version.mjs resolve",
     "version:prepare-client": "node scripts/release-version.mjs prepare-client",
-    "dev:client:web": "npm run dev:h5 -w @shengji/client",
-    "dev:client:wx": "npm run dev:mp-weixin -w @shengji/client",
-    "build:core": "npm run build -w @shengji/pitch-core && npm run build -w @shengji/curve-layout && npm run build -w @shengji/contracts",
-    "build:client:wx": "npm run build:core && npm run build:mp-weixin -w @shengji/client",
-    "build:client:web": "npm run build:core && npm run build:h5 -w @shengji/client",
-    "build:client:ios": "npm run build:core && npm run build:ios -w @shengji/client",
-    "build:client:android": "npm run build:core && npm run build:android -w @shengji/client",
-    "build:client": "npm run build:core && npm run build:h5 -w @shengji/client && npm run build:mp-weixin -w @shengji/client && npm run build:ios -w @shengji/client && npm run build:android -w @shengji/client",
+    "dev:client:web": "npm run dev:h5 -w @singjourney/client",
+    "dev:client:wx": "npm run dev:mp-weixin -w @singjourney/client",
+    "build:core": "npm run build -w @singjourney/pitch-core && npm run build -w @singjourney/curve-layout && npm run build -w @singjourney/contracts",
+    "build:client:wx": "npm run build:core && npm run build:mp-weixin -w @singjourney/client",
+    "build:client:web": "npm run build:core && npm run build:h5 -w @singjourney/client",
+    "build:client:ios": "npm run build:core && npm run build:ios -w @singjourney/client",
+    "build:client:android": "npm run build:core && npm run build:android -w @singjourney/client",
+    "build:client": "npm run build:core && npm run build:h5 -w @singjourney/client && npm run build:mp-weixin -w @singjourney/client && npm run build:ios -w @singjourney/client && npm run build:android -w @singjourney/client",
     "build": "npm run build:client",
-    "typecheck": "npm run typecheck -w @shengji/client",
-    "test": "npm run test -w @shengji/pitch-core"
+    "typecheck": "npm run typecheck -w @singjourney/client",
+    "test": "npm run test -w @singjourney/pitch-core"
   },
   "devDependencies": {
     "typescript": "^5.3.3",

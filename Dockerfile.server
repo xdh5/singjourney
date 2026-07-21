@@ -7,10 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --gid 10001 shengji \
-    && useradd --uid 10001 --gid shengji --no-create-home shengji \
+RUN groupadd --gid 10001 singjourney \
+    && useradd --uid 10001 --gid singjourney --no-create-home singjourney \
     && mkdir -p /data/media \
-    && chown -R shengji:shengji /data
+    && chown -R singjourney:singjourney /data
 
 COPY server/requirements.txt ./requirements.txt
 
@@ -21,7 +21,7 @@ COPY server/migrations ./migrations
 COPY server/alembic.ini ./alembic.ini
 COPY release/versions.json ./release/versions.json
 
-USER shengji
+USER singjourney
 
 EXPOSE 8000
 

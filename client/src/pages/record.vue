@@ -106,9 +106,13 @@
 import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { onHide, onLoad, onReady, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { AudioFrameAccumulator, PitchEngine, midiToNoteName, midiToPitchClass, pcm16ToFloat32 } from '@shengji/pitch-core'
-import { createCurveCommands } from '@shengji/curve-layout'
-import type { StoredPitchPoint } from '@shengji/contracts'
+import { AudioFrameAccumulator, PitchEngine, midiToNoteName, midiToPitchClass, pcm16ToFloat32 } from '@singjourney/pitch-core'
+import { createCurveCommands } from '@singjourney/curve-layout'
+import {
+  MAX_RECORDING_DURATION_SECONDS,
+  RECORDING_DURATION_WARNING_AT_SECONDS,
+  type StoredPitchPoint
+} from '@singjourney/contracts'
 import { formatRecordingName, formatTime, getPlaybackSource, getRecording, removeRecording, storeRecording } from '../shared/recordings'
 import { exportAudio } from '../platform/export-audio'
 import { createPitchCanvasSurface } from '../platform/pitch-canvas'
@@ -234,6 +238,8 @@ let pcmBlockOffset = 0
 let pcmByteLength = 0
 let previewAudioPath = ''
 let currentRecordingId = ''
+let durationWarningShown = false
+let durationLimitHandled = false
 
 const recordLabel = computed(() => {
   if (isRecording.value) return recorderCapabilities.pause ? t('record.pause') : t('record.stop')
@@ -487,12 +493,18 @@ async function toggleRecording() {
     return
   }
 
+  if (hasStarted.value && elapsed >= MAX_RECORDING_DURATION_SECONDS) {
+    uni.showToast({ title: t('record.durationLimitReached'), icon: 'none' })
+    return
+  }
+
   if (!hasStarted.value) {
     try {
       await requestMicrophonePermission()
       resetAnalysis()
       startedAt = Date.now()
       await startRecorder()
+      uni.showToast({ title: t('record.durationLimitNotice'), icon: 'none', duration: 2500 })
     } catch {
       uni.showModal({
         title: t('record.microphonePermissionTitle'),
@@ -607,6 +619,10 @@ async function handleStop(result: { tempFilePath: string; blob?: Blob }) {
   elapsed = miniProgramPlatform && pcmByteLength > 0
     ? pcmByteLength / (SAMPLE_RATE * 2)
     : Math.max(elapsed, (Date.now() - startedAt - pausedDuration) / 1000)
+  if (elapsed >= MAX_RECORDING_DURATION_SECONDS - 0.5) {
+    elapsed = Math.min(elapsed, MAX_RECORDING_DURATION_SECONDS)
+    notifyDurationLimitReached()
+  }
   playbackPosition.value = elapsed
   playbackHasStarted = false
   hasManualSeek = false
@@ -710,6 +726,8 @@ function resetAnalysis() {
   lastAnalysisAt = 0
   unvoicedFrames = 0
   pausedDuration = 0
+  durationWarningShown = false
+  durationLimitHandled = false
   viewportCenterMidi.value = 60
   viewportTargetMidi = 60
   viewportAnimationAt = 0
@@ -978,6 +996,10 @@ async function downloadRecording() {
 
 async function shareRecording() {
   if (!playablePath.value || sharing.value) return
+  if (elapsed > MAX_RECORDING_DURATION_SECONDS) {
+    uni.showToast({ title: t('record.durationTooLongToShare'), icon: 'none' })
+    return
+  }
   sharing.value = true
   uni.showLoading({ title: t('record.generatingShare'), mask: true })
   try {
@@ -1017,7 +1039,16 @@ function showAiComingSoon() {
 
 function updateClock() {
   if (isRecording.value) {
-    timeLabel.value = formatTime(currentRecordingPosition())
+    const position = currentRecordingPosition()
+    if (!durationWarningShown && position >= RECORDING_DURATION_WARNING_AT_SECONDS) {
+      durationWarningShown = true
+      uni.showToast({ title: t('record.durationWarning'), icon: 'none', duration: 3000 })
+    }
+    if (position >= MAX_RECORDING_DURATION_SECONDS) {
+      finishRecordingAtDurationLimit()
+      return
+    }
+    timeLabel.value = formatTime(position)
     return
   }
   if (hasStarted.value || playablePath.value) {
@@ -1025,6 +1056,26 @@ function updateClock() {
     return
   }
   timeLabel.value = '00:00'
+}
+
+function finishRecordingAtDurationLimit() {
+  if (durationLimitHandled || !isRecording.value) return
+  elapsed = MAX_RECORDING_DURATION_SECONDS
+  playbackPosition.value = elapsed
+  isRecording.value = false
+  pendingAction = 'stop'
+  clearTimer()
+  clearRenderTimer()
+  stopRecorder()
+  notifyDurationLimitReached()
+  timeLabel.value = formatTime(elapsed)
+  draw()
+}
+
+function notifyDurationLimitReached() {
+  if (durationLimitHandled) return
+  durationLimitHandled = true
+  uni.showToast({ title: t('record.durationLimitReached'), icon: 'none', duration: 3000 })
 }
 
 function clearTimer() {

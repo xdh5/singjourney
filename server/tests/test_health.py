@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
+import pytest
+from pydantic import ValidationError
 
 from app.main import app
+from app.modules.sharing.schemas import ShareCreateRequest
 
 
 def test_live_health_check() -> None:
@@ -33,18 +36,19 @@ def test_ready_health_check() -> None:
     assert response.json() == {"status": "ready"}
 
 
-def test_client_config_contains_only_public_runtime_values() -> None:
-    """Released clients receive endpoints and cache policy without storage credentials."""
+def test_share_rejects_recordings_longer_than_ten_minutes() -> None:
+    """Share metadata cannot bypass the client-side recording duration limit."""
 
-    with TestClient(app) as client:
-        response = client.get("/api/v1/client-config")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["api_base_url"] == "https://example.test/api/v1"
-    assert payload["share_base_url"] == "https://example.test/"
-    assert payload["media_base_url"] == "https://example.test/api/v1"
-    assert payload["server_version"] == "0.1.0"
-    assert payload["api_major"] == 1
-    assert payload["minimum_client_versions"]["android"] == "0.1.0"
-    assert "r2_secret_access_key" not in payload
+    with pytest.raises(ValidationError):
+        ShareCreateRequest.model_validate(
+            {
+                "title": "Too long",
+                "duration_seconds": 601,
+                "curve": [],
+                "audio": {
+                    "filename": "recording.webm",
+                    "mime_type": "audio/webm",
+                    "byte_size": 1,
+                },
+            }
+        )

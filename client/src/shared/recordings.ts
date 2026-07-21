@@ -1,4 +1,4 @@
-import type { StoredPitchPoint } from '@shengji/contracts'
+import type { StoredPitchPoint } from '@singjourney/contracts'
 import { deleteAudio, persistAudio } from '../platform/audio-files'
 
 export type Recording = {
@@ -13,8 +13,8 @@ export type Recording = {
 
 type StoredWebRecording = Recording & { audio: Blob }
 
-const STORAGE_KEY = 'shengji-recordings-v2'
-const WEB_DB_NAME = 'shengji-unified-recordings'
+const STORAGE_KEY = 'singjourney-recordings-v2'
+const WEB_DB_NAME = 'singjourney-unified-recordings'
 const WEB_STORE = 'recordings'
 let webPlatform = false
 

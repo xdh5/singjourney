@@ -1,9 +1,9 @@
 {
   "app": {
-    "name": "Voice Trace Pitch Meter"
+    "name": "SingJourney"
   },
   "nav": {
-    "home": "Voice Trace Pitch Meter",
+    "home": "SingJourney",
     "record": "Free Recording",
     "recordDetail": "Recording Details",
     "recordings": "Recordings",
@@ -42,12 +42,16 @@
     "aiTitle": "AI Voice Assessment",
     "aiSubtitle": "Five dimensions including pitch and breath",
     "aiComingSoon": "AI assessment is coming soon",
-    "shareMessage": "I recorded “{title}” with Voice Trace Pitch Meter",
-    "shareSummary": "I recorded “{title}” with Voice Trace Pitch Meter. Have a listen!",
+    "shareMessage": "I recorded “{title}” with SingJourney",
+    "shareSummary": "I recorded “{title}” with SingJourney. Have a listen!",
     "notFound": "Recording not found",
     "saveOrClearFirst": "Save or clear the current recording first",
     "microphonePermissionTitle": "Microphone access required",
     "recordingStartFailed": "Could not start recording. Check your browser's microphone permission.",
+    "durationLimitNotice": "Recordings are limited to 10 minutes",
+    "durationWarning": "1 minute remaining. Recording will end at 10 minutes",
+    "durationLimitReached": "10-minute limit reached. Recording ended",
+    "durationTooLongToShare": "Recordings longer than 10 minutes cannot be shared",
     "saved": "Saved on this device",
     "saveFailed": "Could not save locally",
     "deleteTitle": "Delete recording",

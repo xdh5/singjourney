@@ -1,2 +1,2 @@
-"""Shengji API package."""
+"""SingJourney API package."""
 

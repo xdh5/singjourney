@@ -1,4 +1,4 @@
-import { PitchEngine } from '@shengji/pitch-core'
+import { PitchEngine } from '@singjourney/pitch-core'
 
 const FRAME_SIZE = 2048
 

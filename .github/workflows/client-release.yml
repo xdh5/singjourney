@@ -83,7 +83,7 @@ jobs:
       - name: Upload tagged client artifact
         uses: actions/upload-artifact@v4
         with:
-          name: voicetrace-${{ steps.release.outputs.component }}-${{ steps.release.outputs.version }}
+          name: singjourney-${{ steps.release.outputs.component }}-${{ steps.release.outputs.version }}
           path: release-artifact
           if-no-files-found: error
           retention-days: 14

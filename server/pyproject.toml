@@ -3,9 +3,9 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "shengji-api"
+name = "singjourney-api"
 version = "0.1.0"
-description = "Backend API for Shengji voice practice"
+description = "Backend API for SingJourney voice practice"
 requires-python = ">=3.12"
 dependencies = [
   "alembic==1.16.5",

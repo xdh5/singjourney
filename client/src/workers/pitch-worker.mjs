@@ -1,4 +1,4 @@
-import { AudioFrameAccumulator, PitchEngine, pcm16ToFloat32 } from '@shengji/pitch-core'
+import { AudioFrameAccumulator, PitchEngine, pcm16ToFloat32 } from '@singjourney/pitch-core'
 
 const SAMPLE_RATE = 16000
 const FRAME_SIZE = 1024

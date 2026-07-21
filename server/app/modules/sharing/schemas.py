@@ -2,9 +2,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.modules.sharing.constants import MAX_SHARE_DURATION_SECONDS, MAX_SHARE_TITLE_LENGTH
+
 
 class PitchPoint(BaseModel):
-    time: float = Field(ge=0, le=3600)
+    time: float = Field(ge=0, le=MAX_SHARE_DURATION_SECONDS)
     midi: float | None = Field(default=None, ge=0, le=127)
     confidence: float = Field(ge=0, le=1)
 
@@ -16,8 +18,8 @@ class AudioUploadRequest(BaseModel):
 
 
 class ShareCreateRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
-    duration_seconds: float = Field(gt=0, le=3600)
+    title: str = Field(min_length=1, max_length=MAX_SHARE_TITLE_LENGTH)
+    duration_seconds: float = Field(gt=0, le=MAX_SHARE_DURATION_SECONDS)
     curve: list[PitchPoint]
     audio: AudioUploadRequest
 

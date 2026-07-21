@@ -45,6 +45,7 @@ def require_object_storage() -> R2Storage:
         201: {"description": "Upload intent created; the R2 credential is limited to one PUT."},
         413: {"description": "Declared audio size or curve data exceeds configured limits."},
         415: {"description": "The declared MIME type is not a supported audio format."},
+        422: {"description": "Metadata is invalid or the recording exceeds 10 minutes."},
         503: {"description": "R2 credentials or bucket configuration are unavailable."},
     },
 )
