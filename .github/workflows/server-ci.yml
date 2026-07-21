@@ -169,7 +169,8 @@ jobs:
           release_path="$release_root/$RELEASE_SHA"
           current_path="$DEPLOY_PATH/server/current"
           environment_path="$DEPLOY_PATH/server/server.env"
-          mkdir -p "$release_path" "$DEPLOY_PATH/data"
+          mkdir -p "$release_path"
+          sudo install -d -o 10001 -g 10001 -m 750 "$DEPLOY_PATH/data"
           tar -xzf /tmp/server-release.tar.gz -C "$release_path"
           rm -f /tmp/server-release.tar.gz
           install -m 600 /tmp/server-deploy.env "$environment_path"
