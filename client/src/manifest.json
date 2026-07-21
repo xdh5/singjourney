@@ -1,7 +1,7 @@
 {
-  "name": "声迹音调仪",
+  "name": "声入佳境",
   "appid": "__UNI__SINGJOURNEY",
-  "description": "声迹音调仪",
+  "description": "声入佳境",
   "versionName": "1.0.0",
   "versionCode": "100",
   "transformPx": false,
@@ -33,7 +33,13 @@
       "scope.record": { "desc": "用于录制声音并分析音高" }
     }
   },
-  "h5": { "title": "声迹音调仪" },
+  "h5": {
+    "title": "声入佳境",
+    "router": {
+      "mode": "history",
+      "base": "/"
+    }
+  },
   "uniStatistics": { "enable": false },
   "vueVersion": "3"
 }

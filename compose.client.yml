@@ -1,4 +1,11 @@
 services:
+  practice-assets:
+    build:
+      context: .
+      dockerfile: Dockerfile.practice-assets
+    volumes:
+      - ./client/src/static/practice:/output
+
   client-build:
     build:
       context: .

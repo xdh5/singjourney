@@ -6,6 +6,14 @@
     "client",
     "packages/*"
   ],
+  "overrides": {
+    "vue": "3.4.21",
+    "@vue/reactivity": "3.4.21",
+    "@vue/runtime-core": "3.4.21",
+    "@vue/runtime-dom": "3.4.21",
+    "@vue/server-renderer": "3.4.21",
+    "@vue/shared": "3.4.21"
+  },
   "scripts": {
     "version:check": "node scripts/release-version.mjs check",
     "version:resolve": "node scripts/release-version.mjs resolve",
@@ -23,7 +31,9 @@
     "test": "npm run test -w @singjourney/pitch-core"
   },
   "devDependencies": {
+    "@vue/runtime-core": "3.4.21",
     "typescript": "^5.3.3",
+    "vue": "3.4.21",
     "vue-tsc": "^3.3.7"
   }
 }

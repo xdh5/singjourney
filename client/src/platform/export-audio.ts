@@ -55,5 +55,5 @@ function extensionFromPath(filePath: string) {
 }
 
 function safeFileName(value: string) {
-  return value.replace(/[\\/:*?"<>|]/g, '-').trim() || '声迹录音'
+  return value.replace(/[\\/:*?"<>|]/g, '-').trim() || '声入佳境录音'
 }

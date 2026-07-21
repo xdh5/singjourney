@@ -77,28 +77,24 @@
 
     <view class="time-bar">{{ timeLabel }}</view>
 
-    <view class="toolbar" :class="{ 'detail-toolbar': recordingDetailMode }" :style="{ height: `${toolbarHeight}px`, paddingBottom: `${safeBottom}px` }">
-      <view class="tool-item" role="button" @tap="clearRecording">
-        <view class="tool-icon"><image class="tool-image" src="/static/icons/trash.svg" /></view>
-        <text>{{ recordingDetailMode ? t('record.delete') : t('record.clear') }}</text>
-      </view>
-
-      <view class="tool-item" :class="{ disabled: !playablePath }" role="button" @tap="togglePlayback">
-        <view class="tool-icon"><image class="tool-image" :src="isPlaying ? '/static/icons/pause.svg' : '/static/icons/play.svg'" /></view>
-        <text>{{ isPlaying ? t('record.pause') : t('record.play') }}</text>
-      </view>
-
-      <view v-if="!recordingDetailMode" class="tool-item" role="button" @tap="toggleRecording">
-        <view class="tool-icon primary"><image class="tool-image primary-image" :src="isRecording ? '/static/icons/pause-white.svg' : '/static/icons/mic-white.svg'" /></view>
-        <text>{{ recordLabel }}</text>
-      </view>
-
-      <view class="tool-item" :class="{ disabled: !playablePath }" role="button" @tap="downloadRecording">
-        <view class="tool-icon"><image class="tool-image" src="/static/icons/download.svg" /></view>
-        <text>{{ t('record.download') }}</text>
-      </view>
-
-    </view>
+    <recording-toolbar
+      :height="toolbarHeight"
+      :safe-bottom="safeBottom"
+      :clear-label="recordingDetailMode ? t('record.delete') : t('record.clear')"
+      :play-label="isPlaying ? t('record.pause') : t('record.play')"
+      :record-label="recordLabel"
+      :download-label="t('record.download')"
+      :is-playing="isPlaying"
+      :is-recording="isRecording"
+      :playback-disabled="!playablePath"
+      :download-disabled="!playablePath"
+      :show-record="!recordingDetailMode"
+      :detail-mode="recordingDetailMode"
+      @clear="clearRecording"
+      @play="togglePlayback"
+      @record="toggleRecording"
+      @download="downloadRecording"
+    />
   </view>
 </template>
 
@@ -108,19 +104,20 @@ import { onHide, onLoad, onReady, onShareAppMessage, onShow, onUnload } from '@d
 import { useI18n } from 'vue-i18n'
 import { AudioFrameAccumulator, PitchEngine, midiToNoteName, midiToPitchClass, pcm16ToFloat32 } from '@singjourney/pitch-core'
 import { createCurveCommands } from '@singjourney/curve-layout'
+import RecordingToolbar from './components/recording-toolbar.vue'
 import {
   MAX_RECORDING_DURATION_SECONDS,
   RECORDING_DURATION_WARNING_AT_SECONDS,
   type StoredPitchPoint
 } from '@singjourney/contracts'
-import { formatRecordingName, formatTime, getPlaybackSource, getRecording, removeRecording, storeRecording } from '../shared/recordings'
-import { exportAudio } from '../platform/export-audio'
-import { createPitchCanvasSurface } from '../platform/pitch-canvas'
-import { createPcmPreview, deleteTemporaryAudio } from '../platform/audio-files'
-import { prepareShareAudio } from '../platform/share-audio'
-import { createRecordingShare, type ActivatedShare } from '../shared/sharing'
-import { setPageTitle } from '../i18n'
-import { lockDocumentScroll, unlockDocumentScroll } from '../platform/page-scroll'
+import { formatRecordingName, formatTime, getPlaybackSource, getRecording, removeRecording, storeRecording } from './shared/recordings'
+import { exportAudio } from './platform/export-audio'
+import { createPitchCanvasSurface } from './platform/pitch-canvas'
+import { createPcmPreview, deleteTemporaryAudio } from './platform/audio-files'
+import { prepareShareAudio } from './platform/share-audio'
+import { createRecordingShare, type ActivatedShare } from './shared/sharing'
+import { setPageTitle } from './i18n'
+import { lockDocumentScroll, unlockDocumentScroll } from './platform/page-scroll'
 import {
   connectRecorder,
   createPausedRecorderPreview,
@@ -131,7 +128,7 @@ import {
   resumeRecorder,
   startRecorder,
   stopRecorder
-} from '../platform/recorder'
+} from './platform/recorder'
 
 const SAMPLE_RATE = recorderAnalysisConfig.sampleRate
 const BUFFER_SIZE = recorderAnalysisConfig.frameSize
@@ -359,7 +356,7 @@ onUnload(() => {
 
 onShareAppMessage(() => ({
   title: preparedShare.value ? t('record.shareMessage', { title: preparedShare.value.title }) : t('app.name'),
-  path: preparedShare.value ? `/pages/share?id=${encodeURIComponent(preparedShare.value.id)}` : '/pages/home'
+  path: preparedShare.value ? `/share?id=${encodeURIComponent(preparedShare.value.id)}` : '/home'
 }))
 
 async function loadRecordingDetail(options: Record<string, string | undefined> = {}) {
@@ -424,7 +421,7 @@ function initPitchWorker() {
   if (pitchWorker) return
   // #ifdef H5
   try {
-    const webWorker = new Worker(new URL('../workers/pitch-web-worker.ts', import.meta.url), { type: 'module' })
+    const webWorker = new Worker(new URL('./workers/pitch-web-worker.ts', import.meta.url), { type: 'module' })
     webWorker.onmessage = event => handlePitchWorkerMessage(event.data)
     webWorker.onerror = disablePitchWorker
     pitchWorker = webWorker
@@ -1359,60 +1356,6 @@ function clampViewportCenter(value: number) {
   font-variant-numeric: tabular-nums;
 }
 
-.toolbar {
-  display: grid;
-  flex: none;
-  width: 100%;
-  align-items: start;
-  justify-content: center;
-  grid-template-columns: repeat(4, 76rpx);
-  column-gap: 34rpx;
-  padding-top: 13rpx;
-  border-top: 1px solid #d3e2dc;
-  background: #fff;
-  box-sizing: border-box;
-}
-
-.toolbar.detail-toolbar { grid-template-columns: repeat(3, 76rpx); column-gap: 42rpx; }
-
-.tool-item {
-  position: relative;
-  display: flex;
-  width: 76rpx;
-  height: 118rpx;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 8rpx;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  color: #58766c;
-  background: transparent;
-  font-size: 21rpx;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.tool-icon {
-  display: flex;
-  width: 66rpx;
-  height: 66rpx;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #c9ddd5;
-  border-radius: 50%;
-  background: #fff;
-  box-sizing: border-box;
-}
-
-.tool-icon.primary { border-color: #356b5b; background: #356b5b; }
-.tool-image { display: block; width: 34rpx; height: 34rpx; }
-.primary-image { width: 38rpx; height: 38rpx; }
-.tool-item.disabled { opacity: 0.4; }
 .share-button::after { border: 0; }
 
 .top-actions {

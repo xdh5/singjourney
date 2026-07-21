@@ -1,19 +1,27 @@
 {
   "pages": [
     {
-      "path": "pages/home",
+      "path": "home",
       "style": { "navigationBarTitleText": "%nav.home%" }
     },
     {
-      "path": "pages/record",
+      "path": "record",
       "style": { "navigationBarTitleText": "%app.name%", "disableScroll": true }
     },
     {
-      "path": "pages/recordings",
+      "path": "recordings",
       "style": { "navigationBarTitleText": "%nav.recordings%" }
     },
     {
-      "path": "pages/share",
+      "path": "practice",
+      "style": { "navigationBarTitleText": "%nav.practice%" }
+    },
+    {
+      "path": "practice-stats",
+      "style": { "navigationBarTitleText": "%nav.practiceStats%" }
+    },
+    {
+      "path": "share",
       "style": { "navigationBarTitleText": "%nav.share%" }
     }
   ],

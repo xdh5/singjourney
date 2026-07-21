@@ -40,8 +40,8 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { setPageTitle } from '../i18n'
-import { formatRecordingTimestamp, formatTime, listRecordings, removeRecording, type Recording } from '../shared/recordings'
+import { setPageTitle } from './i18n'
+import { formatRecordingTimestamp, formatTime, listRecordings, removeRecording, type Recording } from './shared/recordings'
 
 const items = ref<Recording[]>([])
 const { t } = useI18n()
@@ -52,12 +52,12 @@ onShow(async () => {
 })
 
 function openRecorder() {
-  uni.navigateTo({ url: '/pages/record', animationType: 'none', animationDuration: 0 })
+  uni.navigateTo({ url: '/record', animationType: 'none', animationDuration: 0 })
 }
 
 function openRecording(item: Recording) {
   uni.navigateTo({
-    url: `/pages/record?id=${encodeURIComponent(item.id)}`,
+    url: `/record?id=${encodeURIComponent(item.id)}`,
     animationType: 'none',
     animationDuration: 0
   })

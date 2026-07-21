@@ -7,6 +7,8 @@
     "record": "Free Recording",
     "recordDetail": "Recording Details",
     "recordings": "Recordings",
+    "practice": "Accompanied Practice",
+    "practiceStats": "Practice Statistics",
     "share": "Voice Practice Share"
   },
   "home": {
@@ -17,8 +19,8 @@
     "recordingsDescription": "Play and manage your recordings",
     "accompaniment": "Accompanied Practice",
     "accompanimentDescription": "Complete vocal exercises with accompaniment",
-    "practiceRecords": "Practice History",
-    "practiceRecordsDescription": "Review your progress and assessments",
+    "practiceRecords": "Practice Statistics",
+    "practiceRecordsDescription": "Review daily activity and overall progress",
     "comingSoon": "Coming soon",
     "comingSoonToast": "{name} is coming soon"
   },
@@ -72,6 +74,127 @@
     "delete": "Delete",
     "deleteTitle": "Delete recording",
     "deleteConfirm": "Delete “{name}”?"
+  },
+  "practice": {
+    "voicePreset": "Range preset",
+    "fixedRange": "Fixed practice range: {range}",
+    "startingKey": "Starting note",
+    "voices": { "male": "Male key", "female": "Female key" },
+    "recommended": "Recommended",
+    "lowerPitch": "Lower by one semitone",
+    "raisePitch": "Raise by one semitone",
+    "pitchAdjustmentHelp": "One semitone per step",
+    "categories": {
+      "all": "All",
+      "natural": "1 Natural voice",
+      "connection": "2 Connection",
+      "passaggio": "3 Passaggio",
+      "range": "4 Range",
+      "mix": "5 Mix"
+    },
+    "exerciseList": "Exercises",
+    "pattern": "Pattern",
+    "syllables": "Suggested sounds",
+    "repetitions": "{count} rounds",
+    "intensity": { "light": "Light", "medium": "Moderate", "focused": "Advanced" },
+    "startExercise": "Start practice",
+    "preview": "Preview",
+    "previewComingSoon": "Preview is coming soon",
+    "unavailable": "Not available yet",
+    "customAccompaniment": {
+      "title": "Create your own practice track",
+      "description": "Play and save a performance on the virtual piano, or upload an accompaniment to analyze and convert it into a piano practice track.",
+      "playPiano": "Play virtual piano",
+      "uploadAndParse": "Upload and analyze",
+      "comingSoon": "Practice track creation is coming soon"
+    },
+    "beginNow": "Start practice",
+    "replay": "Replay practice",
+    "recordingLocked": "Replay is available when the accompaniment ends",
+    "targetCurve": "Target curve",
+    "voiceCurve": "Voice curve",
+    "sessionStatus": {
+      "ready": "Ready",
+      "preparing": "Preparing microphone and accompaniment",
+      "recording": "Practice recording in progress",
+      "recordingPaused": "Practice paused; replay or resume",
+      "finishing": "Finalizing recording",
+      "completed": "Practice complete",
+      "playing": "Replaying",
+      "playbackPaused": "Replay paused"
+    },
+    "safetyTitle": "Practice principles",
+    "safetyCopy": "Practise in order: natural voice, connection, passaggio, range, then mix. Keep a speech-like volume and stop for pain, obvious squeezing, or lasting hoarseness.",
+    "exercises": {
+      "lipTrillOctave": {
+        "title": "Octave Lip Trill",
+        "description": "Use an easy lip trill over an octave arpeggio to organize airflow and find a natural vocal setup."
+      },
+      "tongueTrillFive": {
+        "title": "Tongue-trill Five-note Scale",
+        "description": "Use a continuous tongue trill over a five-note scale while keeping the throat free and pitch changes connected."
+      },
+      "mumOctave": {
+        "title": "Mum Octave Connection",
+        "description": "Use a speech-like Mum over an octave arpeggio while keeping the lower and upper registers connected."
+      },
+      "gugFive": {
+        "title": "Gug Five-note Connection",
+        "description": "Use a clear G onset on a five-note scale to keep each pitch steadily connected."
+      },
+      "geeLongScale": {
+        "title": "Gee Long-scale Transition",
+        "description": "Carry Gee through a long scale while staying light and connected across the passaggio."
+      },
+      "nayOctave": {
+        "title": "Nay Octave Transition",
+        "description": "Use a moderately bright, speech-like Nay over an octave arpeggio to connect both sides of the passaggio."
+      },
+      "lipTrillTwelfth": {
+        "title": "Twelfth Lip Trill",
+        "description": "Cross an octave plus a fifth on a lip trill to expand comfortable range with relatively low load."
+      },
+      "nooOctave": {
+        "title": "Noo Octave Scale",
+        "description": "Use a narrow Noo over a full octave scale to keep pitch and register continuity through a longer pattern."
+      },
+      "nayFive": {
+        "title": "Nay Five-note Mix",
+        "description": "Use a bright but moderate Nay over a five-note scale to balance speech-like clarity with head participation."
+      },
+      "mumOctaveRepeat": {
+        "title": "Mum Octave Builder",
+        "description": "Repeat Mum at the octave to keep a natural, connected setup after ascending."
+      },
+      "geeStaccato": {
+        "title": "Gee Staccato Arpeggio",
+        "description": "Use light Gee syllables on a staccato octave arpeggio to build quick onsets and interval accuracy in mix range."
+      }
+    }
+  },
+  "practiceStats": {
+    "title": "Practice Statistics",
+    "subtitle": "Build a steady practice habit and see your progress",
+    "demoBadge": "Demo data",
+    "today": "Today",
+    "total": "All time",
+    "sessions": "Sessions",
+    "duration": "Practice time",
+    "sessionsUnit": "sessions",
+    "activityTitle": "Practice activity",
+    "activitySubtitle": "Last 20 weeks",
+    "less": "Less",
+    "more": "More",
+    "weekdays": ["Mon", "Wed", "Fri"],
+    "todayDetails": "Today's practice",
+    "todayDetailsSubtitle": "Sessions and time by exercise",
+    "exerciseSessions": "{count} sessions",
+    "exerciseDuration": "{duration}",
+    "exercises": {
+      "mumOctave": "Mum Octave Connection",
+      "lipTrillOctave": "Octave Lip Trill",
+      "tongueTrillFive": "Tongue-trill Five-note Scale"
+    }
   },
   "share": {
     "loading": "Loading share…",

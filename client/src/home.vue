@@ -5,7 +5,7 @@
       <text class="subtitle">{{ t('home.subtitle') }}</text>
     </view>
 
-    <view class="card primary" hover-class="none" role="button" @tap="open('/pages/record')">
+    <view class="card primary" hover-class="none" role="button" @tap="open('/record')">
       <view class="card-icon"><view class="record-dot" /></view>
       <view class="copy">
         <text class="card-title">{{ t('home.freeRecording') }}</text>
@@ -14,7 +14,7 @@
       <text class="chevron">›</text>
     </view>
 
-    <view class="card" hover-class="none" role="button" @tap="open('/pages/recordings')">
+    <view class="card" hover-class="none" role="button" @tap="open('/recordings')">
       <view class="card-icon"><view class="play-triangle" /></view>
       <view class="copy">
         <text class="card-title">{{ t('home.recordings') }}</text>
@@ -23,22 +23,22 @@
       <text class="chevron">›</text>
     </view>
 
-    <view class="card upcoming" hover-class="none" role="button" @tap="showComingSoon('home.accompaniment')">
+    <view class="card" hover-class="none" role="button" @tap="open('/practice')">
       <view class="card-icon secondary-icon"><text class="music-note">♪</text></view>
       <view class="copy">
         <text class="card-title">{{ t('home.accompaniment') }}</text>
         <text class="small">{{ t('home.accompanimentDescription') }}</text>
       </view>
-      <text class="coming-badge">{{ t('home.comingSoon') }}</text>
+      <text class="chevron">›</text>
     </view>
 
-    <view class="card upcoming" hover-class="none" role="button" @tap="showComingSoon('home.practiceRecords')">
+    <view class="card" hover-class="none" role="button" @tap="open('/practice-stats')">
       <view class="card-icon secondary-icon"><view class="practice-bars"><view /><view /><view /></view></view>
       <view class="copy">
         <text class="card-title">{{ t('home.practiceRecords') }}</text>
         <text class="small">{{ t('home.practiceRecordsDescription') }}</text>
       </view>
-      <text class="coming-badge">{{ t('home.comingSoon') }}</text>
+      <text class="chevron">›</text>
     </view>
   </view>
 </template>
@@ -46,7 +46,7 @@
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { setPageTitle } from '../i18n'
+import { setPageTitle } from './i18n'
 
 const { t } = useI18n()
 
@@ -56,9 +56,6 @@ function open(url: string) {
   uni.navigateTo({ url, animationType: 'none', animationDuration: 0 })
 }
 
-function showComingSoon(nameKey: string) {
-  uni.showToast({ title: t('home.comingSoonToast', { name: t(nameKey) }), icon: 'none' })
-}
 </script>
 
 <style scoped>
@@ -111,8 +108,6 @@ function showComingSoon(nameKey: string) {
   background: #edf5f1;
 }
 
-.card.upcoming { background: #fbfcfb; }
-
 .card-icon {
   display: flex;
   flex: 0 0 82rpx;
@@ -158,5 +153,4 @@ function showComingSoon(nameKey: string) {
 .card-title { font-size: 32rpx; font-weight: 800; }
 .small { margin-top: 8rpx; color: #6b8179; font-size: 24rpx; }
 .chevron { color: #507064; font-size: 34rpx; }
-.coming-badge { flex: none; padding: 8rpx 14rpx; border-radius: 999rpx; color: #6b8179; background: #edf3f0; font-size: 21rpx; }
 </style>

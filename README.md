@@ -1,6 +1,6 @@
-# 声迹音调仪
+# 声入佳境
 
-声迹音调仪是一套共享页面代码的 Web、微信小程序、iOS、Android 和 HarmonyOS 练声客户端，并配有独立 Python 服务端。
+声入佳境（SingJourney）是一套共享页面代码的 Web、微信小程序、iOS、Android 和 HarmonyOS 练声客户端，并配有独立 Python 服务端。
 
 ## 项目结构
 
@@ -13,6 +13,14 @@ server/                 FastAPI、PostgreSQL 与音频存储层
 ```
 
 ## 客户端 Docker 构建
+
+发布客户端前，先由服务端乐谱代码生成版本化的单音钢琴和正确曲线资产：
+
+```bash
+docker compose -f compose.client.yml run --rm --build practice-assets
+```
+
+生成产物写入 `client/src/static/practice`，普通用户点击练习时只读取缓存资产，不会在线重新合成。
 
 ```bash
 docker compose -f compose.client.yml run --rm --build client-build

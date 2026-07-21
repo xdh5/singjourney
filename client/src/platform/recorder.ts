@@ -75,9 +75,9 @@ export async function requestMicrophonePermission() {
   // #endif
 }
 
-export async function startRecorder() {
+export async function startRecorder(options: { startPaused?: boolean } = {}) {
   if (webPlatform) {
-    await startWebRecorder()
+    await startWebRecorder(Boolean(options.startPaused))
     return
   }
   if (appPlatform) {
@@ -132,7 +132,7 @@ export function stopRecorder() {
   manager.stop()
 }
 
-async function startWebRecorder() {
+async function startWebRecorder(startPaused: boolean) {
   if (!webStream) await requestMicrophonePermission()
   if (!webStream) throw new Error('无法打开麦克风')
   webChunks = []
@@ -155,7 +155,8 @@ async function startWebRecorder() {
   webAnalyser.smoothingTimeConstant = 0
   webAudioSource.connect(webAnalyser)
   mediaRecorder.start(WEB_RECORDING_SLICE_MS)
-  startWebFrames()
+  if (startPaused) mediaRecorder.pause()
+  else startWebFrames()
   events.onStart?.()
 }
 

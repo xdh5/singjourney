@@ -21,9 +21,9 @@
 import { nextTick, ref } from 'vue'
 import { onLoad, onShareAppMessage, onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { resolveApiUrl } from '../config/endpoints'
-import { setPageTitle } from '../i18n'
-import { formatTime } from '../shared/recordings'
+import { resolveApiUrl } from './config/endpoints'
+import { setPageTitle } from './i18n'
+import { formatTime } from './shared/recordings'
 
 type PitchPoint = { time: number; midi: number | null; confidence: number }
 type PublicShare = {
@@ -80,7 +80,7 @@ onUnload(() => player.destroy())
 
 onShareAppMessage(() => ({
   title: share.value ? t('record.shareMessage', { title: share.value.title }) : t('app.name'),
-  path: share.value ? `/pages/share?id=${encodeURIComponent(share.value.id)}` : '/pages/home'
+  path: share.value ? `/share?id=${encodeURIComponent(share.value.id)}` : '/home'
 }))
 
 function togglePlayback() {

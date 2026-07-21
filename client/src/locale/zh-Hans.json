@@ -1,12 +1,14 @@
 {
   "app": {
-    "name": "声迹音调仪"
+    "name": "声入佳境"
   },
   "nav": {
-    "home": "声迹音调仪",
+    "home": "声入佳境",
     "record": "自由录音",
     "recordDetail": "录音详情",
     "recordings": "录音记录",
+    "practice": "伴奏练声",
+    "practiceStats": "练声统计",
     "share": "练声分享"
   },
   "home": {
@@ -17,8 +19,8 @@
     "recordingsDescription": "播放或整理录音",
     "accompaniment": "伴奏练声",
     "accompanimentDescription": "跟随伴奏完成练声训练",
-    "practiceRecords": "练声记录",
-    "practiceRecordsDescription": "查看训练进度与测评结果",
+    "practiceRecords": "练声统计",
+    "practiceRecordsDescription": "查看每日练声与累计进度",
     "comingSoon": "待开发",
     "comingSoonToast": "{name}待开发"
   },
@@ -42,8 +44,8 @@
     "aiTitle": "AI练声测评",
     "aiSubtitle": "音准、气息等五维分析",
     "aiComingSoon": "AI测评待开发",
-    "shareMessage": "我在声迹音调仪录制了「{title}」",
-    "shareSummary": "我在声迹音调仪录制了「{title}」，快来听听吧",
+    "shareMessage": "我在声入佳境录制了「{title}」",
+    "shareSummary": "我在声入佳境录制了「{title}」，快来听听吧",
     "notFound": "录音记录不存在",
     "saveOrClearFirst": "请先保存或清空",
     "microphonePermissionTitle": "需要麦克风权限",
@@ -72,6 +74,127 @@
     "delete": "删除",
     "deleteTitle": "删除录音",
     "deleteConfirm": "确定删除“{name}”吗？"
+  },
+  "practice": {
+    "voicePreset": "音区选择",
+    "fixedRange": "固定练习音域：{range}",
+    "startingKey": "起始音",
+    "voices": { "male": "男声调", "female": "女声调" },
+    "recommended": "推荐",
+    "lowerPitch": "降低半音",
+    "raisePitch": "升高半音",
+    "pitchAdjustmentHelp": "每次升降一个半音",
+    "categories": {
+      "all": "全部",
+      "natural": "1 自然发声",
+      "connection": "2 声音连接",
+      "passaggio": "3 换声过渡",
+      "range": "4 音域扩展",
+      "mix": "5 混声强化"
+    },
+    "exerciseList": "练习曲目",
+    "pattern": "音型",
+    "syllables": "推荐音节",
+    "repetitions": "{count} 轮",
+    "intensity": { "light": "轻柔", "medium": "中等", "focused": "进阶" },
+    "startExercise": "开始练习",
+    "preview": "试听",
+    "previewComingSoon": "试听功能待开发",
+    "unavailable": "暂未开放",
+    "customAccompaniment": {
+      "title": "制作自己的练声伴奏",
+      "description": "使用虚拟钢琴亲自弹奏并保存，或上传已有伴奏，由系统解析并转换成钢琴练声曲。",
+      "playPiano": "弹奏虚拟钢琴",
+      "uploadAndParse": "上传伴奏并解析",
+      "comingSoon": "伴奏制作功能待开发"
+    },
+    "beginNow": "开始练习",
+    "replay": "回放练习",
+    "recordingLocked": "伴奏结束后可回放",
+    "targetCurve": "正确曲线",
+    "voiceCurve": "人声曲线",
+    "sessionStatus": {
+      "ready": "准备开始",
+      "preparing": "正在准备麦克风和伴奏",
+      "recording": "练习录制中",
+      "recordingPaused": "练习已暂停，可回放或继续",
+      "finishing": "正在完成录音",
+      "completed": "练习已完成",
+      "playing": "正在回放",
+      "playbackPaused": "回放已暂停"
+    },
+    "safetyTitle": "练习原则",
+    "safetyCopy": "按自然发声、声音连接、换声过渡、音域扩展、混声强化的顺序练习。保持说话般自然的音量；出现疼痛、明显挤压或持续沙哑时立即停止。",
+    "exercises": {
+      "lipTrillOctave": {
+        "title": "八度唇颤音",
+        "description": "用轻松的唇颤音完成八度琶音，建立稳定气流和自然发声状态。"
+      },
+      "tongueTrillFive": {
+        "title": "舌颤音五音阶",
+        "description": "用连续舌颤音完成五音上下行，在不挤压喉咙的前提下保持声音连贯。"
+      },
+      "mumOctave": {
+        "title": "Mum 八度连接",
+        "description": "用接近自然说话的 Mum 完成八度琶音，在上下声区之间保持连续。"
+      },
+      "gugFive": {
+        "title": "Gug 五音连接",
+        "description": "利用清楚的 G 起音完成五音上下行，训练每个音都保持稳定连接。"
+      },
+      "geeLongScale": {
+        "title": "Gee 长音阶过渡",
+        "description": "用 Gee 跨越较长音阶，让声音经过换声区时仍保持轻巧、连续。"
+      },
+      "nayOctave": {
+        "title": "Nay 八度过渡",
+        "description": "用略带明亮说话感的 Nay 完成八度琶音，寻找换声区两侧的连续感。"
+      },
+      "lipTrillTwelfth": {
+        "title": "十二度唇颤音",
+        "description": "在唇颤音中跨越一个八度加五度，以较低负担逐步扩大舒适音域。"
+      },
+      "nooOctave": {
+        "title": "Noo 八度音阶",
+        "description": "用较窄的 Noo 完成完整八度上下行，保持长音型中的音高和声区连续。"
+      },
+      "nayFive": {
+        "title": "Nay 五音混声",
+        "description": "用明亮但不过度的 Nay 完成五音上下行，稳定说话感与头声参与的平衡。"
+      },
+      "mumOctaveRepeat": {
+        "title": "Mum 八度强化",
+        "description": "在八度顶音重复 Mum，训练升高后仍能维持自然、连贯的发声状态。"
+      },
+      "geeStaccato": {
+        "title": "Gee 断奏琶音",
+        "description": "用轻巧的 Gee 完成八度断奏琶音，强化混声区的快速起音与音程定位。"
+      }
+    }
+  },
+  "practiceStats": {
+    "title": "练声统计",
+    "subtitle": "坚持练声，让每一次进步都有迹可循",
+    "demoBadge": "演示数据",
+    "today": "今天",
+    "total": "累计",
+    "sessions": "练声次数",
+    "duration": "练声时长",
+    "sessionsUnit": "次",
+    "activityTitle": "练声足迹",
+    "activitySubtitle": "最近 20 周",
+    "less": "少",
+    "more": "多",
+    "weekdays": ["一", "三", "五"],
+    "todayDetails": "今日练声",
+    "todayDetailsSubtitle": "按练声曲统计次数与时长",
+    "exerciseSessions": "{count} 次",
+    "exerciseDuration": "{duration}",
+    "exercises": {
+      "mumOctave": "Mum 八度连接",
+      "lipTrillOctave": "八度唇颤音",
+      "tongueTrillFive": "舌颤音五音阶"
+    }
   },
   "share": {
     "loading": "正在加载分享…",
