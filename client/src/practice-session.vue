@@ -68,6 +68,7 @@ import {
   stopRecorder
 } from './platform/recorder'
 import type { PracticeManifest } from './shared/practice'
+import { drawPitchAxis, drawPitchGrid } from './shared/pitch-canvas-renderer'
 
 const props = defineProps<{ manifest: PracticeManifest }>()
 const emit = defineEmits<{ close: [] }>()
@@ -475,18 +476,18 @@ function draw() {
   const viewStart = Math.max(0, position.value - plotWidth * PLAYHEAD_RATIO / PIXELS_PER_SECOND)
   const viewEnd = viewStart + plotWidth / PIXELS_PER_SECOND
 
-  setFill(ctx, '#ffffff')
-  ctx.fillRect(0, 0, width, height)
-  for (let midi = minimumMidi; midi <= maximumMidi; midi += 1) {
-    const y = (maximumMidi - midi) * rowHeight
-    setFill(ctx, midi % 12 === 0 ? '#edf5f1' : (midi % 2 === 0 ? '#f8faf9' : '#ffffff'))
-    ctx.fillRect(0, y, plotWidth, rowHeight)
-    setStroke(ctx, '#dce8e3', 1)
-    ctx.beginPath()
-    ctx.moveTo(0, y + 0.5)
-    ctx.lineTo(plotWidth, y + 0.5)
-    ctx.stroke()
+  const pitchLayer = {
+    context: ctx,
+    direct: directCanvas,
+    width,
+    height,
+    axisWidth: AXIS_WIDTH,
+    viewportMaxMidi: maximumMidi,
+    rowHeight,
+    minimumMidi,
+    maximumMidi
   }
+  drawPitchGrid(pitchLayer)
 
   for (const note of props.manifest.targetNotes) {
     if (note.end < viewStart || note.start > viewEnd) continue
@@ -520,14 +521,7 @@ function draw() {
   ctx.lineTo(playheadX, height)
   ctx.stroke()
 
-  setFill(ctx, '#d9eee6')
-  ctx.fillRect(plotWidth, 0, AXIS_WIDTH, height)
-  setFill(ctx, '#294c43')
-  setFont(ctx)
-  for (let midi = minimumMidi; midi <= maximumMidi; midi += 1) {
-    const y = (maximumMidi - midi + 0.5) * rowHeight
-    ctx.fillText(midiToNoteName(midi), plotWidth + 7, y)
-  }
+  drawPitchAxis(pitchLayer)
   commitCanvas()
 }
 
@@ -543,16 +537,6 @@ function setStroke(ctx: any, color: string, width: number) {
   } else {
     ctx.setStrokeStyle(color)
     ctx.setLineWidth(width)
-  }
-}
-
-function setFont(ctx: any) {
-  if (directCanvas) {
-    ctx.font = '10px sans-serif'
-    ctx.textBaseline = 'middle'
-  } else {
-    ctx.setFontSize(10)
-    ctx.setTextBaseline?.('middle')
   }
 }
 

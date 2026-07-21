@@ -44,14 +44,13 @@ export async function createPitchCanvasSurface(input: {
   // that update before applying the final DPR transform, otherwise it resets
   // the context to identity after our first draw and halves the visible area.
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-  canvas.width = input.width
-  canvas.height = input.height
+  canvas.width = Math.round(input.width * pixelRatio)
+  canvas.height = Math.round(input.height * pixelRatio)
   const webContext = canvas.getContext('2d') as CanvasRenderingContext2D
   if (!webContext) throw new Error('浏览器不支持 Canvas 2D')
-  // The H5 uni-canvas context applies DPR once more when transforming drawing
-  // coordinates. Counter it here so page coordinates remain CSS-pixel based.
-  const coordinateScale = 1 / pixelRatio
-  webContext.setTransform(coordinateScale, 0, 0, coordinateScale, 0, 0)
+  // Use CSS-pixel drawing coordinates with a high-resolution backing store.
+  // This prevents mobile WebViews from clipping the pitch rail on the right.
+  webContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
   return { context: webContext, direct: true, node: canvas, commit: () => {} }
   // #endif
 

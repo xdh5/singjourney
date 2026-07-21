@@ -102,7 +102,7 @@
 import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { onHide, onLoad, onReady, onShareAppMessage, onShow, onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { AudioFrameAccumulator, PitchEngine, midiToNoteName, midiToPitchClass, pcm16ToFloat32 } from '@singjourney/pitch-core'
+import { AudioFrameAccumulator, PitchEngine, pcm16ToFloat32 } from '@singjourney/pitch-core'
 import { createCurveCommands } from '@singjourney/curve-layout'
 import RecordingToolbar from './components/recording-toolbar.vue'
 import {
@@ -119,6 +119,12 @@ import { createRecordingShare, type ActivatedShare } from './shared/sharing'
 import { setPageTitle } from './i18n'
 import { lockDocumentScroll, unlockDocumentScroll } from './platform/page-scroll'
 import {
+  drawPitchAxis,
+  drawPitchGrid,
+  PITCH_MAXIMUM_MIDI,
+  PITCH_MINIMUM_MIDI
+} from './shared/pitch-canvas-renderer'
+import {
   connectRecorder,
   createPausedRecorderPreview,
   pauseRecorder,
@@ -132,8 +138,8 @@ import {
 
 const SAMPLE_RATE = recorderAnalysisConfig.sampleRate
 const BUFFER_SIZE = recorderAnalysisConfig.frameSize
-const MIN_MIDI = 24
-const MAX_MIDI = 108
+const MIN_MIDI = PITCH_MINIMUM_MIDI
+const MAX_MIDI = PITCH_MAXIMUM_MIDI
 const ROW_HEIGHT = 18
 const AXIS_WIDTH = 52
 const PIXELS_PER_SECOND = 72
@@ -143,7 +149,6 @@ const PCM_BLOCK_SIZE = 64 * 1024
 const PLAYHEAD_RATIO = 0.5
 const TIME_BAR_HEIGHT_RPX = 38
 const TOOLBAR_HEIGHT_RPX = 144
-const OCTAVE_COLORS = ['#ffffd9', '#edf8b1', '#c7e9b4', '#7fcdbb', '#41b6c4', '#1d91c0', '#225ea8', '#225ea8']
 
 const canvasWidth = ref(375)
 const canvasHeight = ref(500)
@@ -1185,7 +1190,18 @@ function drawCanvas(cursorTime: number) {
   const plotWidth = Math.max(1, width - AXIS_WIDTH)
   const viewportMaxMidi = viewportCenterMidi.value + height / (2 * ROW_HEIGHT) - 0.5
   ctx.clearRect(0, 0, width, height)
-  drawPitchGrid(ctx, width, height, viewportMaxMidi)
+  const pitchLayer = {
+    context: ctx,
+    direct: directCanvas,
+    width,
+    height,
+    axisWidth: AXIS_WIDTH,
+    viewportMaxMidi,
+    rowHeight: ROW_HEIGHT,
+    minimumMidi: MIN_MIDI,
+    maximumMidi: MAX_MIDI
+  }
+  drawPitchGrid(pitchLayer)
   const playheadX = plotWidth * PLAYHEAD_RATIO
   const startTime = cursorTime - playheadX / PIXELS_PER_SECOND
   const commands = createCurveCommands(points, {
@@ -1228,50 +1244,8 @@ function drawCanvas(cursorTime: number) {
   ctx.stroke()
   // Keep the pitch rail as the final canvas layer so curve/playhead drawing
   // can never cover or clear the C1-C8 labels on the right.
-  drawPitchAxis(ctx, width, height, viewportMaxMidi)
+  drawPitchAxis(pitchLayer)
   commitCanvas()
-}
-
-function drawPitchGrid(ctx: any, width: number, height: number, viewportMaxMidi: number) {
-  const plotWidth = Math.max(1, width - AXIS_WIDTH)
-  const firstMidi = Math.min(MAX_MIDI, Math.ceil(viewportMaxMidi))
-  const lastMidi = Math.max(MIN_MIDI, Math.floor(viewportMaxMidi - height / ROW_HEIGHT) - 1)
-  setCanvasFont(ctx)
-  for (let midi = firstMidi; midi >= lastMidi; midi -= 1) {
-    const y = (viewportMaxMidi - midi) * ROW_HEIGHT
-    const pitchClass = midiToPitchClass(midi)
-    const octave = Math.floor(midi / 12) - 1
-    const octaveColor = OCTAVE_COLORS[Math.max(0, Math.min(OCTAVE_COLORS.length - 1, octave - 1))]
-
-    setCanvasFill(ctx, pitchClass.includes('#') ? '#f3f7f5' : '#ffffff')
-    ctx.fillRect(0, y, plotWidth, ROW_HEIGHT)
-    setCanvasStroke(ctx, pitchClass === 'C' ? octaveColor : '#e4ece8', 1)
-    ctx.beginPath()
-    ctx.moveTo(0, y + 0.5)
-    ctx.lineTo(plotWidth, y + 0.5)
-    ctx.stroke()
-  }
-}
-
-function drawPitchAxis(ctx: any, width: number, height: number, viewportMaxMidi: number) {
-  const axisLeft = Math.max(1, width - AXIS_WIDTH)
-  const firstMidi = Math.min(MAX_MIDI, Math.ceil(viewportMaxMidi))
-  const lastMidi = Math.max(MIN_MIDI, Math.floor(viewportMaxMidi - height / ROW_HEIGHT) - 1)
-  setCanvasFont(ctx)
-  for (let midi = firstMidi; midi >= lastMidi; midi -= 1) {
-    const y = (viewportMaxMidi - midi) * ROW_HEIGHT
-    const octave = Math.floor(midi / 12) - 1
-    const octaveColor = OCTAVE_COLORS[Math.max(0, Math.min(OCTAVE_COLORS.length - 1, octave - 1))]
-    setCanvasFill(ctx, octaveColor)
-    ctx.fillRect(axisLeft, y, AXIS_WIDTH, ROW_HEIGHT + 1)
-    setCanvasFill(ctx, octave >= 6 ? '#ffffff' : '#294c43')
-    ctx.fillText(midiToNoteName(midi), axisLeft + 8, y + ROW_HEIGHT / 2)
-  }
-  setCanvasStroke(ctx, '#86aa9f', 1)
-  ctx.beginPath()
-  ctx.moveTo(axisLeft + 0.5, 0)
-  ctx.lineTo(axisLeft + 0.5, height)
-  ctx.stroke()
 }
 
 function setCanvasFill(ctx: any, color: string) {
@@ -1287,18 +1261,6 @@ function setCanvasStroke(ctx: any, color: string, width: number) {
     ctx.setStrokeStyle(color)
     ctx.setLineWidth(width)
   }
-}
-
-function setCanvasFont(ctx: any) {
-  if (directCanvas) {
-    ctx.font = '10px sans-serif'
-    ctx.textBaseline = 'middle'
-    ctx.textAlign = 'left'
-    return
-  }
-  ctx.setFontSize(10)
-  ctx.setTextBaseline?.('middle')
-  ctx.setTextAlign?.('left')
 }
 
 function clamp(value: number, min: number, max: number) {
