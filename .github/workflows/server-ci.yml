@@ -136,7 +136,7 @@ jobs:
           ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Package server release
-        run: tar -czf server-release.tar.gz Dockerfile.server compose.server.yml server
+        run: tar -czf server-release.tar.gz Dockerfile.server compose.server.yml release server
 
       - name: Create protected server environment
         run: |
