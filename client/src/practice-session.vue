@@ -68,10 +68,11 @@ import {
   stopRecorder
 } from './platform/recorder'
 import type { PracticeManifest } from './shared/practice'
+import { createPracticeEventId, type CompletedPracticeEvent } from './shared/practice-statistics'
 import { drawPitchAxis, drawPitchGrid } from './shared/pitch-canvas-renderer'
 
 const props = defineProps<{ manifest: PracticeManifest }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], completed: [event: CompletedPracticeEvent] }>()
 const { t } = useI18n()
 const instance = getCurrentInstance()
 
@@ -120,6 +121,9 @@ let recordingPausedAt = 0
 let replayReturnStatus: 'recordingPaused' | 'completed' = 'completed'
 let resumeRecorderOnGate = false
 let recordingSessionOpen = false
+let completedEventSent = false
+let practiceEventId = ''
+let practiceStartedAt = ''
 let miniProgramPlatform = false
 let webPlatform = false
 // #ifdef MP-WEIXIN
@@ -221,6 +225,10 @@ async function startAccompaniment() {
 
 function openRecordingGate() {
   if (status.value !== 'preparing') return
+  if (!practiceEventId) {
+    practiceEventId = createPracticeEventId()
+    practiceStartedAt = new Date().toISOString()
+  }
   if (resumeRecorderOnGate) resumeRecorder()
   resumeRecorderOnGate = false
   status.value = 'recording'
@@ -370,6 +378,16 @@ async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
   status.value = 'completed'
   position.value = props.manifest.duration
   draw()
+  if (!completedEventSent && practiceEventId && practiceStartedAt) {
+    completedEventSent = true
+    emit('completed', {
+      clientEventId: practiceEventId,
+      exerciseKey: props.manifest.exerciseKey,
+      durationSeconds: props.manifest.duration,
+      startedAt: practiceStartedAt,
+      endedAt: new Date().toISOString()
+    })
+  }
   void recordingBlob
 }
 
@@ -432,6 +450,9 @@ function clearPractice() {
   engine.reset()
   accumulator.reset()
   status.value = 'ready'
+  completedEventSent = false
+  practiceEventId = ''
+  practiceStartedAt = ''
   draw()
 }
 

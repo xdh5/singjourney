@@ -14,20 +14,23 @@ export async function exportAudio(input: ExportAudioInput) {
   link.download = `${safeFileName(input.name)}.${extension}`
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-  return
+  return 'exported' as const
   // #endif
 
   // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
+  const filePath = /^https?:\/\//i.test(input.filePath)
+    ? await downloadMiniProgramFile(wxApi, input.filePath)
+    : input.filePath
   await new Promise<void>((resolve, reject) => {
     wxApi.shareFileMessage({
-      filePath: input.filePath,
-      fileName: `${safeFileName(input.name)}${extensionFromPath(input.filePath)}`,
+      filePath,
+      fileName: `${safeFileName(input.name)}${extensionFromPath(filePath)}`,
       success: () => resolve(),
       fail: reject
     })
   })
-  return
+  return 'exported' as const
   // #endif
 
   // #ifdef APP-PLUS
@@ -39,8 +42,24 @@ export async function exportAudio(input: ExportAudioInput) {
       fail: reject
     })
   })
+  return 'exported' as const
   // #endif
 }
+
+// #ifdef MP-WEIXIN
+function downloadMiniProgramFile(wxApi: any, url: string) {
+  return new Promise<string>((resolve, reject) => {
+    wxApi.downloadFile({
+      url,
+      success: (result: { statusCode: number; tempFilePath: string }) => {
+        if (result.statusCode >= 200 && result.statusCode < 300) resolve(result.tempFilePath)
+        else reject(new Error(`Audio download failed: ${result.statusCode}`))
+      },
+      fail: reject
+    })
+  })
+}
+// #endif
 
 function extensionForMimeType(mimeType: string) {
   if (mimeType.includes('mp4') || mimeType.includes('aac')) return 'm4a'
@@ -55,5 +74,5 @@ function extensionFromPath(filePath: string) {
 }
 
 function safeFileName(value: string) {
-  return value.replace(/[\\/:*?"<>|]/g, '-').trim() || '声入佳境录音'
+  return value.replace(/[\\/:*?"<>|]/g, '-').trim() || '声刻度录音'
 }

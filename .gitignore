@@ -34,6 +34,7 @@ yarn-error.log
 
 # Generated from client/src/workers/pitch-worker.mjs during WeChat builds.
 client/src/static/workers/pitch.js
+client/.generated-mini-programs/
 .diagnostics/
 
 /generated/prisma

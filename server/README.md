@@ -1,6 +1,6 @@
-# 声入佳境服务端
+# 声刻度服务端
 
-当前服务端只开放健康检查和 7 天有效的录音分享接口。账号、云端录音、伴奏、练声统计与 AI 测评只有数据库边界，尚未开放接口。
+当前服务端开放健康检查、7 天有效的录音分享、练声小程序微信登录和真实练声统计接口。云端录音、在线伴奏与 AI 测评只有数据库边界，尚未开放接口。
 
 客户端统一使用 `https://singjourney.com`，公开端点集中定义，页面与业务模块不得写死服务域名。
 
@@ -15,14 +15,14 @@ app/
     accounts/          用户、第三方身份、登录会话
     media/             音频资产、未来的云端录音
     sharing/           当前已实现的临时分享
-    practice/          伴奏与练声会话数据模型
+    practice/          伴奏资产、练声会话记录与真实统计
     evaluations/       AI 测评与五维结果数据模型
   storage/             文件存储适配层，本地开发磁盘与生产 R2
   jobs/                定时清理等后台任务
 migrations/            Alembic 数据库迁移
 ```
 
-业务代码按领域组织。未来增加登录或测评时，在对应模块内增加 `router.py`、`schemas.py` 和 `service.py`，不把所有接口堆进一个文件。
+业务代码按领域组织。练声微信小程序登录位于 `accounts` 模块，使用微信临时 code 换取身份并签发应用会话；未来增加其他登录提供方或测评时继续放入对应领域，不把所有接口堆进一个文件。
 
 ## 数据原则
 
@@ -63,6 +63,13 @@ docker compose -f compose.server.yml exec api python -m app.jobs.cleanup_expired
 - `GET /api/v1/shares/{id}`：获取公开分享数据。
 - `GET /api/v1/shares/{id}/audio`：校验有效期后跳转至短期 R2 GET 地址，API 不转发音频字节。
 - `DELETE /api/v1/shares/{id}`：凭创建时返回的删除令牌提前删除。
+
+## 当前练声统计接口
+
+- `POST /api/v1/practice/sessions`：登录用户完成整次练习后记录练习曲、有效时长与起止时间；客户端事件 ID 保证网络重试不会重复计次。
+- `GET /api/v1/practice/statistics`：按用户本地时区返回今天、累计、最近 20 周每日活动和今天各练习曲汇总。
+
+两个接口都要求应用 Bearer 会话。统计只保存小体积元数据，不上传录音文件或音高曲线。
 
 ## Cloudflare R2 配置
 

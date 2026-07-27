@@ -1,6 +1,6 @@
-# 声入佳境
+# 声刻度
 
-声入佳境（SingJourney）是一套共享页面代码的 Web、微信小程序、iOS、Android 和 HarmonyOS 练声客户端，并配有独立 Python 服务端。
+声刻度（SingJourney）是一套共享页面代码的 Web、微信小程序、iOS、Android 和 HarmonyOS 练声客户端，并配有独立 Python 服务端。
 
 ## 项目结构
 
@@ -26,15 +26,24 @@ docker compose -f compose.client.yml run --rm --build practice-assets
 docker compose -f compose.client.yml run --rm --build client-build
 ```
 
+日常开发可只构建受影响的平台，例如音调仪微信小程序：
+
+```bash
+docker compose -f compose.client.yml run --rm --build client-build-wx-pitch
+```
+
+其他单端服务名为 `client-build-web`、`client-build-wx-practice`、`client-build-ios` 和 `client-build-android`；全量 `client-build` 留给共享核心改动和发布前验证。
+
 产物位于：
 
 - `client/dist/h5`
-- `client/dist/mp-weixin`
+- `client/dist/mp-weixin/pitch-meter`
+- `client/dist/mp-weixin/vocal-practice`
 - `client/dist/ios`
 - `client/dist/android`
 - `client/dist/harmony`（HBuilderX/DevEco 完成 HarmonyOS 构建后规范化生成）
 
-微信开发者工具直接导入 `client/dist/mp-weixin`。
+微信开发者工具分别导入 `client/dist/mp-weixin/pitch-meter` 和 `client/dist/mp-weixin/vocal-practice`。构建时通过 `SINGJOURNEY_PITCH_MINI_PROGRAM_APP_ID` 与 `SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID` 配置两个独立 AppID。
 
 ## 服务端 Docker 启动
 
@@ -42,14 +51,15 @@ docker compose -f compose.client.yml run --rm --build client-build
 docker compose -f compose.server.yml up --build
 ```
 
-当前服务端只开放临时录音分享；账号、同步、伴奏、练声统计和 AI 测评已经规划数据边界，但尚未提供接口。参见 [server/README.md](server/README.md)。
+当前服务端开放临时录音分享、练声小程序微信登录和真实练声统计；微信登录还需配置 `SINGJOURNEY_WECHAT_PRACTICE_APP_ID` 与 `SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET`。练习自然完成后会按登录用户记录次数与有效时长，统计接口不上传录音或曲线。云端录音同步、在线伴奏和 AI 测评尚未提供接口。参见 [server/README.md](server/README.md)。
 
 ## 独立版本与发布
 
 所有可发布组件的当前版本统一记录在 `release/versions.json`，但各组件独立升级：
 
 - Web：`web-v0.1.0`
-- 微信小程序：`wx-v0.1.0`
+- 音调仪微信小程序：`wx-pitch-v0.1.0`
+- 练声微信小程序：`wx-practice-v0.1.0`
 - iOS：`ios-v0.1.0`
 - Android：`android-v0.1.0`
 - HarmonyOS：`harmony-v0.1.0`

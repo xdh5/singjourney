@@ -10,5 +10,60 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.client
+      args:
+        PITCH_MINI_PROGRAM_APP_ID: ${SINGJOURNEY_PITCH_MINI_PROGRAM_APP_ID:-touristappid}
+        PRACTICE_MINI_PROGRAM_APP_ID: ${SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID:-touristappid}
     volumes:
       - ./client/dist:/output
+
+  client-build-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      target: web-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:web
+    volumes:
+      - ./client/dist/h5:/output
+
+  client-build-wx-pitch:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      target: wx-pitch-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:wx-pitch
+        PITCH_MINI_PROGRAM_APP_ID: ${SINGJOURNEY_PITCH_MINI_PROGRAM_APP_ID:-touristappid}
+    volumes:
+      - ./client/dist/mp-weixin/pitch-meter:/output
+
+  client-build-wx-practice:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      target: wx-practice-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:wx-practice
+        PRACTICE_MINI_PROGRAM_APP_ID: ${SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID:-touristappid}
+    volumes:
+      - ./client/dist/mp-weixin/vocal-practice:/output
+
+  client-build-ios:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      target: ios-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:ios
+    volumes:
+      - ./client/dist/ios:/output
+
+  client-build-android:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+      target: android-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:android
+    volumes:
+      - ./client/dist/android:/output

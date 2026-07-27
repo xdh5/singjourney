@@ -1,9 +1,22 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app'
+import { onLaunch, onShow } from '@dcloudio/uni-app'
+import { isVocalPracticeMiniProgram } from './config/mini-program'
 import { removeLegacyWebAppCache } from './platform/legacy-pwa'
+import { getStoredAuthSession } from './shared/authentication'
+
+const LOGIN_ROUTE = 'login'
 
 onLaunch(() => {
   void removeLegacyWebAppCache()
+})
+
+onShow(() => {
+  if (!isVocalPracticeMiniProgram || getStoredAuthSession()) return
+  setTimeout(() => {
+    const pages = getCurrentPages()
+    const currentRoute = pages[pages.length - 1]?.route || ''
+    if (currentRoute !== LOGIN_ROUTE) uni.reLaunch({ url: `/${LOGIN_ROUTE}` })
+  }, 0)
 })
 </script>
 

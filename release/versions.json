@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "components": {
     "web": "0.1.0",
-    "wx": "0.1.0",
+    "wx-pitch": "0.1.0",
+    "wx-practice": "0.1.0",
     "ios": "0.1.0",
     "android": "0.1.0",
     "harmony": "0.1.0",
@@ -12,7 +13,8 @@
     "currentMajor": 1,
     "minimumClientVersions": {
       "web": "0.1.0",
-      "wx": "0.1.0",
+      "wx-pitch": "0.1.0",
+      "wx-practice": "0.1.0",
       "ios": "0.1.0",
       "android": "0.1.0",
       "harmony": "0.1.0"

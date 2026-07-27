@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 
 from app.core.config import Settings
 from app.modules.media.formats import safe_audio_suffix
+from app.modules.sharing.constants import SHARE_AUDIO_CACHE_CONTROL
 from app.storage.base import ObjectMetadata
 
 R2_PROVIDER = "cloudflare_r2"
@@ -57,7 +58,12 @@ class R2Storage:
     def create_upload_url(self, storage_key: str, content_type: str) -> str:
         return self.client.generate_presigned_url(
             "put_object",
-            Params={"Bucket": self.bucket_name, "Key": storage_key, "ContentType": content_type},
+            Params={
+                "Bucket": self.bucket_name,
+                "Key": storage_key,
+                "ContentType": content_type,
+                "CacheControl": SHARE_AUDIO_CACHE_CONTROL,
+            },
             ExpiresIn=self.upload_url_ttl_seconds,
         )
 

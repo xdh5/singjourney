@@ -27,8 +27,12 @@ ARG CLIENT_RUN_CHECKS=false
 ARG CLIENT_RELEASE_COMPONENT=
 ARG CLIENT_RELEASE_TAG=
 ARG CLIENT_RELEASE_VERSION=0.0.0-dev
+ARG PITCH_MINI_PROGRAM_APP_ID=touristappid
+ARG PRACTICE_MINI_PROGRAM_APP_ID=touristappid
 ENV VITE_RELEASE_COMPONENT=${CLIENT_RELEASE_COMPONENT} \
-    VITE_RELEASE_VERSION=${CLIENT_RELEASE_VERSION}
+    VITE_RELEASE_VERSION=${CLIENT_RELEASE_VERSION} \
+    SINGJOURNEY_PITCH_MINI_PROGRAM_APP_ID=${PITCH_MINI_PROGRAM_APP_ID} \
+    SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID=${PRACTICE_MINI_PROGRAM_APP_ID}
 RUN if [ -n "$CLIENT_RELEASE_COMPONENT" ] && { [ "$CLIENT_RELEASE_COMPONENT" = "ios" ] || [ "$CLIENT_RELEASE_COMPONENT" = "android" ]; }; then \
       npm run version:prepare-client -- "$CLIENT_RELEASE_COMPONENT" "$CLIENT_RELEASE_TAG"; \
     fi \
@@ -39,9 +43,13 @@ FROM scratch AS web-artifact
 
 COPY --from=build /workspace/client/dist/build/h5 /
 
-FROM scratch AS wx-artifact
+FROM scratch AS wx-pitch-artifact
 
-COPY --from=build /workspace/client/dist/build/mp-weixin /
+COPY --from=build /workspace/client/dist/build/mp-weixin/pitch-meter /
+
+FROM scratch AS wx-practice-artifact
+
+COPY --from=build /workspace/client/dist/build/mp-weixin/vocal-practice /
 
 FROM scratch AS ios-artifact
 
@@ -50,6 +58,31 @@ COPY --from=build /workspace/client/dist/build/ios /
 FROM scratch AS android-artifact
 
 COPY --from=build /workspace/client/dist/build/android /
+
+FROM alpine:3.21 AS web-output
+
+COPY --from=build /workspace/client/dist/build/h5 /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS wx-pitch-output
+
+COPY --from=build /workspace/client/dist/build/mp-weixin/pitch-meter /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS wx-practice-output
+
+COPY --from=build /workspace/client/dist/build/mp-weixin/vocal-practice /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS ios-output
+
+COPY --from=build /workspace/client/dist/build/ios /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS android-output
+
+COPY --from=build /workspace/client/dist/build/android /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
 
 FROM alpine:3.21 AS artifact
 

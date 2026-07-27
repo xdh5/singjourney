@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     share_upload_url_ttl_seconds: int = 15 * 60
     share_download_url_ttl_seconds: int = 5 * 60
     max_share_audio_bytes: int = 25 * 1024 * 1024
+    wechat_practice_app_id: str = ""
+    wechat_practice_app_secret: str = ""
+    auth_session_days: int = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",

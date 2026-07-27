@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.modules.media.formats import audio_format_for_mime
 from app.modules.media.models import AudioAsset
-from app.modules.sharing.constants import SHARE_ASSET_PURPOSE, UPLOAD_STATUS_PENDING, UPLOAD_STATUS_READY
+from app.modules.sharing.constants import (
+    SHARE_ASSET_PURPOSE,
+    SHARE_AUDIO_CACHE_CONTROL,
+    UPLOAD_STATUS_PENDING,
+    UPLOAD_STATUS_READY,
+)
 from app.modules.sharing.models import RecordingShare
 from app.modules.sharing.schemas import (
     PitchPoint,
@@ -74,7 +79,10 @@ def initiate_share(
         id=share.public_id,
         expires_at=share.expires_at,
         upload_url=upload_url,
-        upload_headers={"Content-Type": request.audio.mime_type},
+        upload_headers={
+            "Content-Type": request.audio.mime_type,
+            "Cache-Control": SHARE_AUDIO_CACHE_CONTROL,
+        },
         complete_url=f"{settings.public_api_base_url.rstrip('/')}/shares/{share.public_id}/complete",
         delete_token=delete_token,
     )
@@ -103,11 +111,15 @@ def complete_share(
     return _created_response(settings, share)
 
 
-def get_share(db: Session, settings: Settings, public_id: str) -> SharePublic | None:
+def get_share(
+    db: Session,
+    storage: DirectObjectStorage,
+    public_id: str,
+) -> SharePublic | None:
     row = _get_share_audio(db, public_id)
     if not row:
         return None
-    share, _ = row
+    share, asset = row
     share.view_count += 1
     db.commit()
     return SharePublic(
@@ -118,7 +130,7 @@ def get_share(db: Session, settings: Settings, public_id: str) -> SharePublic | 
         curve=[PitchPoint.model_validate(point) for point in share.curve_data],
         created_at=share.created_at,
         expires_at=share.expires_at,
-        audio_url=_audio_url(settings, share.public_id),
+        audio_url=storage.create_download_url(asset.storage_key),
     )
 
 
@@ -171,10 +183,7 @@ def _created_response(settings: Settings, share: RecordingShare) -> ShareActivat
         title=share.title,
         duration_seconds=share.duration_seconds,
         expires_at=share.expires_at,
-        share_url=(
-            f"{settings.public_share_base_url.rstrip('/')}/#/pages/share/index"
-            f"?id={share.public_id}"
-        ),
+        share_url=f"{settings.public_share_base_url.rstrip('/')}/share?id={share.public_id}",
         audio_url=_audio_url(settings, share.public_id),
     )
 

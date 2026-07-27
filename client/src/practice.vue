@@ -1,5 +1,10 @@
 <template>
-  <practice-session v-if="activeManifest" :manifest="activeManifest" @close="activeManifest = null" />
+  <practice-session
+    v-if="activeManifest"
+    :manifest="activeManifest"
+    @close="activeManifest = null"
+    @completed="saveCompletedPractice"
+  />
   <view v-else class="page">
     <view class="practice-principles">
       <text class="principles-title">{{ t('practice.safetyTitle') }}</text>
@@ -124,6 +129,10 @@ import maleManifestJson from './static/practice/connection-mum-octave-v1-male.js
 import femaleManifestJson from './static/practice/connection-mum-octave-v1-female.json'
 import type { PracticeManifest } from './shared/practice'
 import {
+  recordCompletedPractice,
+  type CompletedPracticeEvent
+} from './shared/practice-statistics'
+import {
   ENABLED_EXERCISE_ID,
   EXERCISE_CATEGORIES,
   VOCAL_EXERCISES,
@@ -169,6 +178,12 @@ function exerciseNumber(id: string) {
 function startExercise(id: string) {
   if (id !== ENABLED_EXERCISE_ID) return
   activeManifest.value = manifests[selectedVoice.value]
+}
+
+function saveCompletedPractice(event: CompletedPracticeEvent) {
+  void recordCompletedPractice(event).catch(() => {
+    // The event remains in the local retry queue and is synchronized when statistics opens.
+  })
 }
 
 function previewExercise() {

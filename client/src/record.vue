@@ -32,38 +32,7 @@
       <!-- #endif -->
 
       <view class="page-mode" @touchstart.stop @touchmove.stop>
-        {{ recordingDetailMode ? t('record.playbackMode') : t('record.freeRecordingMode') }}
-      </view>
-
-      <view class="top-actions" @touchstart.stop @touchmove.stop>
-        <view
-          v-if="!recordingDetailMode"
-          class="top-action"
-          :class="{ disabled: !hasStarted || saving }"
-          role="button"
-          @tap.stop="saveRecording"
-        >
-          <image class="top-action-icon" src="/static/icons/save.svg" />
-          <text>{{ saving ? t('record.saving') : t('record.save') }}</text>
-        </view>
-
-        <!-- #ifdef MP-WEIXIN -->
-        <button v-if="preparedShare" class="top-action top-share-button" open-type="share">
-          <image class="top-action-icon" src="/static/icons/share.svg" />
-          <text>{{ t('record.share') }}</text>
-        </button>
-        <view v-else class="top-action" :class="{ disabled: !playablePath || sharing }" role="button" @tap.stop="shareRecording">
-          <image class="top-action-icon" src="/static/icons/share.svg" />
-          <text>{{ sharing ? t('record.generating') : t('record.share') }}</text>
-        </view>
-        <!-- #endif -->
-
-        <!-- #ifndef MP-WEIXIN -->
-        <view class="top-action" :class="{ disabled: !playablePath || sharing }" role="button" @tap.stop="shareRecording">
-          <image class="top-action-icon" src="/static/icons/share.svg" />
-          <text>{{ sharing ? t('record.generating') : t('record.share') }}</text>
-        </view>
-        <!-- #endif -->
+        {{ recordingModeLabel }}
       </view>
 
       <view v-if="showAiEntry" class="ai-entry" role="button" @tap.stop="showAiComingSoon" @touchstart.stop @touchmove.stop>
@@ -84,16 +53,25 @@
       :play-label="isPlaying ? t('record.pause') : t('record.play')"
       :record-label="recordLabel"
       :download-label="t('record.download')"
+      :save-label="saving ? t('record.saving') : t('record.save')"
+      :share-label="sharing ? t('record.generating') : t('record.share')"
       :is-playing="isPlaying"
       :is-recording="isRecording"
+      :clear-disabled="isRecording || !hasStarted"
       :playback-disabled="!playablePath"
-      :download-disabled="!playablePath"
+      :download-disabled="!recordingDetailMode || !playablePath"
+      :save-disabled="isRecording || !hasStarted || saving"
+      :share-disabled="!playablePath || sharing"
       :show-record="!recordingDetailMode"
+      :show-download="!webPlatform && recordingDetailMode"
+      :show-save="!webPlatform && !recordingDetailMode"
       :detail-mode="recordingDetailMode"
       @clear="clearRecording"
       @play="togglePlayback"
       @record="toggleRecording"
       @download="downloadRecording"
+      @save="saveRecording"
+      @share="shareRecording"
     />
   </view>
 </template>
@@ -110,12 +88,19 @@ import {
   RECORDING_DURATION_WARNING_AT_SECONDS,
   type StoredPitchPoint
 } from '@singjourney/contracts'
-import { formatRecordingName, formatTime, getPlaybackSource, getRecording, removeRecording, storeRecording } from './shared/recordings'
+import { formatRecordingName, formatTime, getPlaybackSource, getRecording, RECORDING_TYPE, removeRecording, storeRecording } from './shared/recordings'
 import { exportAudio } from './platform/export-audio'
 import { createPitchCanvasSurface } from './platform/pitch-canvas'
 import { createPcmPreview, deleteTemporaryAudio } from './platform/audio-files'
 import { prepareShareAudio } from './platform/share-audio'
-import { createRecordingShare, type ActivatedShare } from './shared/sharing'
+import {
+  cacheRecordingShare,
+  createRecordingShare,
+  getCachedRecordingShare,
+  getPublicRecordingShare,
+  ShareFlowError,
+  type ActivatedShare
+} from './shared/sharing'
 import { setPageTitle } from './i18n'
 import { lockDocumentScroll, unlockDocumentScroll } from './platform/page-scroll'
 import {
@@ -164,6 +149,7 @@ const timeLabel = ref('00:00')
 const playbackPosition = ref(0)
 const recordingDetailMode = ref(false)
 const preparedShare = ref<ActivatedShare | null>(null)
+const sharedShareReference = ref<{ id: string; title: string } | null>(null)
 
 const fallbackPitchDetector = true
 const primaryPitchDetector: 'yin' | 'macleod' = 'yin'
@@ -180,6 +166,10 @@ const points: StoredPitchPoint[] = []
 const player = uni.createInnerAudioContext()
 const instance = getCurrentInstance()
 const { t } = useI18n()
+const recordingModeLabel = computed(() => recordingDetailMode.value
+  ? t('record.playbackMode')
+  : t('record.freeRecordingMode'))
+const defaultRecordingName = computed(() => t('record.defaultName'))
 
 let context: any = null
 let directCanvas = false
@@ -188,8 +178,12 @@ let commitCanvas = () => {}
 let canvasInitialized = false
 let canvasDrawQueued = false
 let miniProgramPlatform = false
+let webPlatform = false
 // #ifdef MP-WEIXIN
 miniProgramPlatform = true
+// #endif
+// #ifdef H5
+webPlatform = true
 // #endif
 let pitchWorker: any = null
 let workerBusy = false
@@ -239,9 +233,12 @@ let pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
 let pcmBlockOffset = 0
 let pcmByteLength = 0
 let previewAudioPath = ''
+let remoteSharedAudioUrl = ''
+let remotePlaybackLoading = false
 let currentRecordingId = ''
 let durationWarningShown = false
 let durationLimitHandled = false
+let sharePreparationPromise: Promise<ActivatedShare> | null = null
 
 const recordLabel = computed(() => {
   if (isRecording.value) return recorderCapabilities.pause ? t('record.pause') : t('record.stop')
@@ -272,6 +269,7 @@ const disconnectRecorder = connectRecorder({
 
 player.onTimeUpdate(syncPlaybackPosition)
 player.onCanplay(() => {
+  if (remoteSharedAudioUrl && playerSourcePath === remoteSharedAudioUrl) hideRemotePlaybackLoading()
   if (!playbackStarting || pendingPlayerSeek === null) return
   const position = pendingPlayerSeek
   pendingPlayerSeek = null
@@ -283,6 +281,7 @@ player.onCanplay(() => {
   player.seek(position)
 })
 player.onPlay(() => {
+  hideRemotePlaybackLoading()
   if (!playbackStarting) return
   playbackStarting = false
   isPlaying.value = true
@@ -326,12 +325,18 @@ player.onEnded(() => {
   draw()
 })
 player.onError(() => {
+  const remotePlaybackFailed = Boolean(remoteSharedAudioUrl && playerSourcePath === remoteSharedAudioUrl)
+  hideRemotePlaybackLoading()
   isPlaying.value = false
   playbackStarting = false
   pendingPlayerSeek = null
   awaitingPlayerSeek = null
   clearTimer()
   clearRenderTimer()
+  if (remotePlaybackFailed) uni.showToast({ title: t('share.playFailed'), icon: 'none' })
+})
+;(player as any).onWaiting?.(() => {
+  if (remoteSharedAudioUrl && playerSourcePath === remoteSharedAudioUrl) showRemotePlaybackLoading()
 })
 
 onReady(initCanvas)
@@ -342,6 +347,7 @@ onLoad(loadRecordingDetail)
 onShow(lockDocumentScroll)
 onHide(unlockDocumentScroll)
 onUnload(() => {
+  hideRemotePlaybackLoading()
   unlockDocumentScroll()
   clearTimer()
   clearRenderTimer()
@@ -359,17 +365,34 @@ onUnload(() => {
   player.destroy()
 })
 
-onShareAppMessage(() => ({
-  title: preparedShare.value ? t('record.shareMessage', { title: preparedShare.value.title }) : t('app.name'),
-  path: preparedShare.value ? `/share?id=${encodeURIComponent(preparedShare.value.id)}` : '/home'
-}))
+onShareAppMessage(() => {
+  if (sharedShareReference.value) return createMiniProgramShareMessage(sharedShareReference.value)
+  if (preparedShare.value) return createMiniProgramShareMessage(preparedShare.value)
+  const fallback = { title: t('app.name'), path: '/home' }
+  if (!playablePath.value) return fallback
+  return {
+    ...fallback,
+    promise: ensurePreparedShare()
+      .then(createMiniProgramShareMessage)
+      .catch(error => {
+        void showShareFailure(error)
+        return fallback
+      })
+  }
+})
 
 async function loadRecordingDetail(options: Record<string, string | undefined> = {}) {
+  const shareId = options?.shareId ? decodeURIComponent(options.shareId) : ''
   const id = options?.id ? decodeURIComponent(options.id) : ''
   setPageTitle('app.name')
+  if (shareId) {
+    await loadSharedRecording(shareId)
+    return
+  }
   if (!id) return
   recordingDetailMode.value = true
   currentRecordingId = id
+  preparedShare.value = getCachedRecordingShare(id)
   try {
     const recording = await getRecording(id)
     if (!recording) throw new Error('recording not found')
@@ -379,7 +402,7 @@ async function loadRecordingDetail(options: Record<string, string | undefined> =
     playbackHasStarted = false
     hasManualSeek = false
     playablePath.value = await getPlaybackSource(recording)
-    exportName = formatRecordingName(new Date(recording.createdAt), t('record.defaultName'))
+    exportName = formatRecordingName(new Date(recording.createdAt), defaultRecordingName.value)
     const lastVoicedPoint = [...points].reverse().find(point => point.midi !== null)
     if (lastVoicedPoint && lastVoicedPoint.midi !== null) {
       const center = clampViewportCenter(lastVoicedPoint.midi)
@@ -392,6 +415,34 @@ async function loadRecordingDetail(options: Record<string, string | undefined> =
   } catch {
     uni.showToast({ title: t('record.notFound'), icon: 'none' })
     setTimeout(() => uni.navigateBack(), 500)
+  }
+}
+
+async function loadSharedRecording(shareId: string) {
+  recordingDetailMode.value = true
+  try {
+    const share = await getPublicRecordingShare(shareId)
+    sharedShareReference.value = { id: share.id, title: share.title }
+    points.splice(0, points.length, ...(Array.isArray(share.curve) ? share.curve : []))
+    elapsed = Math.max(0, share.duration_seconds || 0)
+    playbackPosition.value = elapsed
+    playbackHasStarted = false
+    hasManualSeek = false
+    playablePath.value = share.audio_url
+    remoteSharedAudioUrl = share.audio_url
+    exportName = share.title
+    const lastVoicedPoint = [...points].reverse().find(point => point.midi !== null)
+    if (lastVoicedPoint?.midi !== null && lastVoicedPoint?.midi !== undefined) {
+      const center = clampViewportCenter(lastVoicedPoint.midi)
+      viewportTargetMidi = center
+      viewportCenterMidi.value = center
+    }
+    updateClock()
+    await nextTick()
+    draw()
+  } catch {
+    uni.showToast({ title: t('share.expired'), icon: 'none' })
+    setTimeout(() => uni.reLaunch({ url: '/pitch-home' }), 800)
   }
 }
 
@@ -659,11 +710,12 @@ async function persistCurrentRecording() {
       blob: tempBlob,
       recording: {
         id,
-        name: formatRecordingName(date, t('record.defaultName')),
+        name: formatRecordingName(date, defaultRecordingName.value),
         duration: elapsed,
         createdAt: date.toISOString(),
         pointCount: points.length,
-        points: [...points]
+        points: [...points],
+        recordingType: RECORDING_TYPE.PITCH_METER
       }
     })
     deleteTemporaryAudio(previewAudioPath)
@@ -825,6 +877,7 @@ async function togglePlayback() {
     }
     return
   }
+  if (remoteSharedAudioUrl && playablePath.value === remoteSharedAudioUrl) showRemotePlaybackLoading()
   player.src = playablePath.value
   playerHasSource = true
   playerSourcePath = playablePath.value
@@ -836,6 +889,18 @@ async function togglePlayback() {
   startPreparedPlayback(playbackPosition.value)
 }
 
+function showRemotePlaybackLoading() {
+  if (remotePlaybackLoading) return
+  remotePlaybackLoading = true
+  uni.showLoading({ title: t('share.loadingAudio'), mask: true })
+}
+
+function hideRemotePlaybackLoading() {
+  if (!remotePlaybackLoading) return
+  remotePlaybackLoading = false
+  uni.hideLoading()
+}
+
 function stopPlayback() {
   playbackRequestId += 1
   cancelSeekAnimation()
@@ -843,6 +908,7 @@ function stopPlayback() {
   awaitingPlayerSeek = null
   playbackStarting = false
   isPlaying.value = false
+  hideRemotePlaybackLoading()
   if (playerHasSource) {
     ignoreEndedBefore = Date.now() + 500
     player.stop()
@@ -989,8 +1055,9 @@ async function downloadRecording() {
   try {
     await exportAudio({
       filePath: playablePath.value,
-      name: exportName || formatRecordingName(new Date(), t('record.defaultName'))
+      name: exportName || formatRecordingName(new Date(), defaultRecordingName.value)
     })
+    if (!miniProgramPlatform) uni.showToast({ title: t('record.downloaded'), icon: 'none' })
   } catch {
     uni.showToast({ title: t('record.exportFailed'), icon: 'none' })
   }
@@ -1005,17 +1072,7 @@ async function shareRecording() {
   sharing.value = true
   uni.showLoading({ title: t('record.generatingShare'), mask: true })
   try {
-    const audio = await prepareShareAudio(playablePath.value, tempBlob)
-    const share = await createRecordingShare({
-      title: exportName || formatRecordingName(new Date(), t('record.defaultName')),
-      durationSeconds: elapsed,
-      points: [...points],
-      audio
-    })
-    preparedShare.value = share
-    // #ifdef MP-WEIXIN
-    uni.showToast({ title: t('record.shareReady'), icon: 'none' })
-    // #endif
+    const share = await ensurePreparedShare()
     // #ifdef H5
     if (navigator.share) await navigator.share({ title: share.title, url: share.share_url })
     else await uni.setClipboardData({ data: share.share_url })
@@ -1023,16 +1080,63 @@ async function shareRecording() {
     // #ifdef APP-PLUS
     await (uni as any).shareWithSystem({
       type: 'text',
-      summary: t('record.shareSummary', { title: share.title }),
+      summary: t('record.shareSummary'),
       href: share.share_url
     })
     // #endif
-  } catch {
-    uni.showToast({ title: t('record.shareFailed'), icon: 'none' })
+  } catch (error) {
+    await showShareFailure(error)
   } finally {
     uni.hideLoading()
     sharing.value = false
   }
+}
+
+function ensurePreparedShare() {
+  if (preparedShare.value) return Promise.resolve(preparedShare.value)
+  if (sharePreparationPromise) return sharePreparationPromise
+  sharePreparationPromise = createPreparedShare()
+    .finally(() => {
+      sharePreparationPromise = null
+      sharing.value = false
+    })
+  sharing.value = true
+  return sharePreparationPromise
+}
+
+async function createPreparedShare() {
+  let audio
+  try {
+    audio = await prepareShareAudio(playablePath.value, tempBlob)
+  } catch (error) {
+    throw new ShareFlowError('preparation', error)
+  }
+  const share = await createRecordingShare({
+    title: exportName || formatRecordingName(new Date(), defaultRecordingName.value),
+    durationSeconds: elapsed,
+    points: [...points],
+    audio
+  })
+  preparedShare.value = share
+  cacheRecordingShare(currentRecordingId, share)
+  return share
+}
+
+function createMiniProgramShareMessage(share: Pick<ActivatedShare, 'id' | 'title'>) {
+  return {
+    title: t('record.shareMessage'),
+    path: `/record?shareId=${encodeURIComponent(share.id)}`
+  }
+}
+
+async function showShareFailure(error: unknown) {
+  console.error('Unable to create recording share', error)
+  const stage = error instanceof ShareFlowError ? error.stage : 'unknown'
+  await uni.showModal({
+    title: t('record.shareFailed'),
+    content: t(`record.shareFailureStage.${stage}`),
+    showCancel: false
+  })
 }
 
 function showAiComingSoon() {
@@ -1319,37 +1423,6 @@ function clampViewportCenter(value: number) {
 }
 
 .share-button::after { border: 0; }
-
-.top-actions {
-  position: absolute;
-  z-index: 4;
-  top: 18rpx;
-  right: 76rpx;
-  display: flex;
-  gap: 14rpx;
-}
-
-.top-action {
-  display: flex;
-  min-width: 112rpx;
-  height: 58rpx;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  margin: 0;
-  padding: 0 18rpx;
-  border: 1px solid #c9ddd5;
-  border-radius: 999rpx;
-  box-sizing: border-box;
-  color: #356b5b;
-  background: rgba(255, 255, 255, 0.94);
-  font-size: 23rpx;
-  line-height: 1;
-}
-
-.top-action.disabled { opacity: 0.4; }
-.top-action-icon { width: 28rpx; height: 28rpx; }
-.top-share-button::after { border: 0; }
 
 .ai-entry {
   position: absolute;

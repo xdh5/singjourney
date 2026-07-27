@@ -1,19 +1,20 @@
 {
   "app": {
-    "name": "声入佳境"
+    "name": "声刻度"
   },
   "nav": {
-    "home": "声入佳境",
-    "record": "自由录音",
+    "home": "声刻度",
+    "record": "音调仪",
     "recordDetail": "录音详情",
     "recordings": "录音记录",
     "practice": "伴奏练声",
+    "practiceRecordings": "练声录音",
     "practiceStats": "练声统计",
     "share": "练声分享"
   },
   "home": {
     "subtitle": "捕捉声音，描摹每一次音高起伏",
-    "freeRecording": "自由录音",
+    "freeRecording": "音调仪",
     "freeRecordingDescription": "实时查看并保存音高曲线",
     "recordings": "录音记录",
     "recordingsDescription": "播放或整理录音",
@@ -21,8 +22,33 @@
     "accompanimentDescription": "跟随伴奏完成练声训练",
     "practiceRecords": "练声统计",
     "practiceRecordsDescription": "查看每日练声与累计进度",
+    "practiceRecordings": "练声录音",
+    "practiceRecordingsDescription": "回放和管理伴奏练声录音",
     "comingSoon": "待开发",
     "comingSoonToast": "{name}待开发"
+  },
+  "miniProgram": {
+    "pitchTitle": "声刻度音调仪",
+    "pitchSubtitle": "看见音高变化，记录每一次声音",
+    "practiceTitle": "声刻度练声",
+    "practiceSubtitle": "跟随专业伴奏练习，积累你的练声进度",
+    "practiceEyebrow": "今日练声计划",
+    "practiceToday": "开始练习"
+  },
+  "login": {
+    "title": "登录声刻度练声",
+    "subtitle": "登录后记录练声次数、时长和长期进度",
+    "wechatLogin": "微信一键登录",
+    "loggingIn": "正在登录",
+    "failed": "登录失败，请检查服务配置",
+    "privacyNote": "登录仅用于识别你的练声账号，不会读取微信聊天内容。"
+  },
+  "practiceRecordings": {
+    "localNotice": "练声录音提醒",
+    "wechatNotice": "录音目前保存在当前微信中。清理微信数据或更换设备后可能丢失，请及时下载备份。",
+    "empty": "还没有练声录音",
+    "emptyDescription": "完成一次伴奏练声后，录音会显示在这里。",
+    "start": "开始伴奏练声"
   },
   "record": {
     "save": "保存",
@@ -34,18 +60,19 @@
     "pause": "暂停",
     "play": "播放",
     "download": "下载",
+    "downloaded": "文件已保存到本地",
     "stop": "停止",
     "continue": "继续",
     "stopped": "已停止",
     "record": "录音",
-    "defaultName": "自由录音",
-    "freeRecordingMode": "自由录音",
+    "defaultName": "音调仪",
+    "freeRecordingMode": "音调仪",
     "playbackMode": "录音回放",
     "aiTitle": "AI练声测评",
     "aiSubtitle": "音准、气息等五维分析",
     "aiComingSoon": "AI测评待开发",
-    "shareMessage": "我在声入佳境录制了「{title}」",
-    "shareSummary": "我在声入佳境录制了「{title}」，快来听听吧",
+    "shareMessage": "我在声刻度录制了我的声音，快来听听吧！",
+    "shareSummary": "我在声刻度录制了我的声音，快来听听吧！",
     "notFound": "录音记录不存在",
     "saveOrClearFirst": "请先保存或清空",
     "microphonePermissionTitle": "需要麦克风权限",
@@ -62,18 +89,32 @@
     "exportFailed": "导出失败",
     "generatingShare": "生成分享中",
     "shareReady": "已生成，再点一次分享",
-    "shareFailed": "生成分享失败"
+    "shareFailed": "生成分享失败",
+    "shareFailureStage": {
+      "preparation": "录音压缩失败，请重新进入录音详情后再试。",
+      "intent": "分享接口请求失败，请检查网络和 singjourney.com 请求域名。",
+      "upload": "录音上传到 R2 失败，请检查 R2 request 合法域名配置。",
+      "activation": "录音已上传，但服务端校验失败。",
+      "unknown": "发生未知错误，请查看真机调试控制台。"
+    }
   },
   "recordings": {
     "localNotice": "本地记录提醒",
-    "wechatNotice": "练声记录保存在当前微信中。清理微信数据或更换设备后可能丢失，请及时下载备份。",
-    "webNotice": "练声记录保存在当前浏览器中。清理浏览器数据、使用无痕模式或更换浏览器后可能丢失，请及时下载备份。",
-    "appNotice": "练声记录保存在当前设备中。卸载应用、清理应用数据或更换设备后可能丢失，请及时下载备份。",
+    "wechatNotice": "录音记录仅保存在当前微信中，清理微信数据或更换设备后可能丢失。请及时下载备份，点击录音进入详情页即可下载。",
+    "webNotice": "录音记录仅保存在当前浏览器中，清理浏览器数据、使用无痕模式或更换浏览器后可能丢失。请及时下载备份，点击录音进入详情页即可下载。",
+    "appNotice": "录音记录仅保存在当前设备中，卸载应用、清理应用数据或更换设备后可能丢失。请及时下载备份，点击录音进入详情页即可下载。",
     "empty": "还没有录音",
-    "start": "开始自由录音",
+    "emptyDescription": "开始第一次录音，记录每一次声音变化",
+    "start": "打开音调仪",
+    "myRecordings": "我的录音",
+    "select": "选择",
+    "cancelSelection": "取消",
+    "pitchMeterTag": "音调仪",
+    "accompaniedPracticeTag": "伴奏练声",
     "delete": "删除",
     "deleteTitle": "删除录音",
-    "deleteConfirm": "确定删除“{name}”吗？"
+    "deleteConfirm": "确定删除“{name}”吗？",
+    "deleteSelectedConfirm": "确定删除已选择的 {count} 条录音吗？"
   },
   "practice": {
     "voicePreset": "音区选择",
@@ -175,7 +216,8 @@
   "practiceStats": {
     "title": "练声统计",
     "subtitle": "坚持练声，让每一次进步都有迹可循",
-    "demoBadge": "演示数据",
+    "loadFailed": "练声统计加载失败",
+    "emptyToday": "今天还没有完成练声",
     "today": "今天",
     "total": "累计",
     "sessions": "练声次数",
@@ -198,6 +240,7 @@
   },
   "share": {
     "loading": "正在加载分享…",
+    "loadingAudio": "音频加载中",
     "play": "播放",
     "pause": "暂停",
     "expiry": "分享内容仅保留7天",

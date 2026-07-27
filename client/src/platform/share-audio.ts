@@ -5,26 +5,19 @@ export type ShareAudioPayload = {
   mimeType: string
 }
 
-const MIME_BY_SUFFIX: Record<string, string> = {
-  aac: 'audio/aac',
-  m4a: 'audio/mp4',
-  mp3: 'audio/mpeg',
-  ogg: 'audio/ogg',
-  opus: 'audio/opus',
-  wav: 'audio/wav',
-  webm: 'audio/webm'
-}
+const SHARE_SAMPLE_RATE = 8000
+const SHARE_AUDIO_FILENAME = 'share-preview.wav'
+const SHARE_AUDIO_MIME_TYPE = 'audio/wav'
 
 export async function prepareShareAudio(filePath: string, preferredBlob?: Blob): Promise<ShareAudioPayload> {
-  const filename = fileNameFromPath(filePath)
-
   // #ifdef H5
   const webBlob: Blob = preferredBlob ?? await fetch(filePath).then(response => response.blob())
+  const compressed = await compressWebAudio(webBlob)
   return {
-    body: webBlob,
-    byteSize: webBlob.size,
-    filename,
-    mimeType: webBlob.type || mimeTypeFromPath(filename)
+    body: compressed,
+    byteSize: compressed.byteLength,
+    filename: SHARE_AUDIO_FILENAME,
+    mimeType: SHARE_AUDIO_MIME_TYPE
   }
   // #endif
 
@@ -37,12 +30,12 @@ export async function prepareShareAudio(filePath: string, preferredBlob?: Blob):
       fail: reject
     })
   })
-  return { body: weixinBody, byteSize: weixinBody.byteLength, filename, mimeType: mimeTypeFromPath(filename) }
+  return createCompressedSharePayload(weixinBody)
   // #endif
 
   // #ifdef APP-PLUS
   const appBody = await readAppFile(filePath)
-  return { body: appBody, byteSize: appBody.byteLength, filename, mimeType: mimeTypeFromPath(filename) }
+  return createCompressedSharePayload(appBody)
   // #endif
 
   throw new Error('当前平台不支持上传分享录音')
@@ -71,16 +64,35 @@ export async function uploadShareAudio(url: string, headers: Record<string, stri
   })
 }
 
-function fileNameFromPath(filePath: string) {
-  const cleanPath = filePath.split(/[?#]/)[0]
-  const candidate = cleanPath.split('/').pop() || 'recording.wav'
-  return candidate.includes('.') ? candidate : `${candidate}.wav`
+function createCompressedSharePayload(wav: ArrayBuffer): ShareAudioPayload {
+  const { samples, sampleRate } = readShareSamples(wav)
+  const body = createLowBitrateWav(samples, sampleRate, SHARE_SAMPLE_RATE)
+  return { body, byteSize: body.byteLength, filename: SHARE_AUDIO_FILENAME, mimeType: SHARE_AUDIO_MIME_TYPE }
 }
 
-function mimeTypeFromPath(filename: string) {
-  const suffix = filename.split('.').pop()?.toLowerCase() || 'wav'
-  return MIME_BY_SUFFIX[suffix] || 'audio/wav'
+function readShareSamples(source: ArrayBuffer) {
+  try {
+    return readMonoSamplesFromWav(source)
+  } catch {
+    // 微信录音在尚未落盘为 WAV 时会提供原始 16-bit PCM；分享预览同样可直接降采样。
+    const pcm = new Int16Array(source)
+    const samples = new Float32Array(pcm.length)
+    for (let index = 0; index < pcm.length; index += 1) samples[index] = pcm[index] / 32768
+    return { samples, sampleRate: 16000 }
+  }
 }
+
+// #ifdef H5
+async function compressWebAudio(source: Blob) {
+  const context = new AudioContext()
+  try {
+    const decoded = await context.decodeAudioData(await source.arrayBuffer())
+    return createLowBitrateWav(decoded.getChannelData(0), decoded.sampleRate, SHARE_SAMPLE_RATE)
+  } finally {
+    await context.close()
+  }
+}
+// #endif
 
 // #ifdef APP-PLUS
 function readAppFile(filePath: string) {
@@ -100,3 +112,4 @@ function readAppFile(filePath: string) {
   })
 }
 // #endif
+import { createLowBitrateWav, readMonoSamplesFromWav } from '../shared/wav'

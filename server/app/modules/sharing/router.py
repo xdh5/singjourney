@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.modules.media.formats import audio_format_for_mime
-from app.modules.sharing.constants import MAX_CURVE_JSON_BYTES, MAX_CURVE_POINTS, MIN_DELETE_TOKEN_LENGTH
+from app.modules.sharing.constants import (
+    MAX_CURVE_JSON_BYTES,
+    MAX_CURVE_POINTS,
+    MIN_DELETE_TOKEN_LENGTH,
+    SHARE_AUDIO_REDIRECT_CACHE_CONTROL,
+)
 from app.modules.sharing.schemas import ShareActivated, ShareCreateRequest, SharePublic, ShareUploadIntent
 from app.modules.sharing.service import (
     InvalidUploadedObjectError,
@@ -111,9 +116,9 @@ def finish_share(
 def read_share(
     public_id: str,
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    storage: R2Storage = Depends(require_object_storage),
 ) -> SharePublic:
-    share = get_share(db, settings, public_id)
+    share = get_share(db, storage, public_id)
     if not share:
         raise HTTPException(status_code=404, detail="Share not found or expired")
     return share
@@ -137,7 +142,11 @@ def read_share_audio(
     if not row:
         raise HTTPException(status_code=404, detail="Share not found or expired")
     _, asset = row
-    return RedirectResponse(storage.create_download_url(asset.storage_key), status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    return RedirectResponse(
+        storage.create_download_url(asset.storage_key),
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        headers={"Cache-Control": SHARE_AUDIO_REDIRECT_CACHE_CONTROL},
+    )
 
 
 @router.delete(

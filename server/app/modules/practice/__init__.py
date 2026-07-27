@@ -1,2 +1,1 @@
-"""Practice and accompaniment data models reserved for future endpoints."""
-
+"""Guided-practice assets, authenticated session tracking, and statistics."""

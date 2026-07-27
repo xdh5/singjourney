@@ -1,7 +1,7 @@
 {
-  "name": "声入佳境",
+  "name": "声刻度",
   "appid": "__UNI__SINGJOURNEY",
-  "description": "声入佳境",
+  "description": "声刻度",
   "versionName": "1.0.0",
   "versionCode": "100",
   "transformPx": false,
@@ -26,6 +26,7 @@
   },
   "mp-weixin": {
     "appid": "touristappid",
+    "lazyCodeLoading": "requiredComponents",
     "workers": "static/workers",
     "setting": { "urlCheck": false },
     "usingComponents": true,
@@ -34,7 +35,7 @@
     }
   },
   "h5": {
-    "title": "声入佳境",
+    "title": "声刻度",
     "router": {
       "mode": "history",
       "base": "/"

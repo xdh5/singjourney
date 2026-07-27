@@ -9,7 +9,15 @@ export type Recording = {
   createdAt: string
   pointCount: number
   points: StoredPitchPoint[]
+  recordingType?: RecordingType
 }
+
+export const RECORDING_TYPE = {
+  PITCH_METER: 'pitch-meter',
+  ACCOMPANIED_PRACTICE: 'accompanied-practice'
+} as const
+
+export type RecordingType = typeof RECORDING_TYPE[keyof typeof RECORDING_TYPE]
 
 type StoredWebRecording = Recording & { audio: Blob }
 

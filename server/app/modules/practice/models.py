@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,16 +24,19 @@ class Accompaniment(Base):
 
 class PracticeSession(Base):
     __tablename__ = "practice_sessions"
-    __table_args__ = (Index("ix_practice_sessions_user_started", "user_id", "started_at"),)
+    __table_args__ = (
+        Index("ix_practice_sessions_user_started", "user_id", "started_at"),
+        UniqueConstraint("user_id", "client_event_id", name="uq_practice_session_user_event"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     recording_id: Mapped[str | None] = mapped_column(ForeignKey("recordings.id", ondelete="SET NULL"), index=True)
     accompaniment_id: Mapped[str | None] = mapped_column(ForeignKey("accompaniments.id", ondelete="SET NULL"), index=True)
     exercise_key: Mapped[str | None] = mapped_column(String(80), index=True)
+    client_event_id: Mapped[str | None] = mapped_column(String(80))
     mode: Mapped[str] = mapped_column(String(32))
     duration_seconds: Mapped[float] = mapped_column(Float, default=0)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-

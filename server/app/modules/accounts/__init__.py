@@ -1,2 +1,1 @@
-"""Account domain models; API endpoints will be added with authentication."""
-
+"""Unified account identities and WeChat practice-mini-program authentication."""

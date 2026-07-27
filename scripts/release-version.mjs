@@ -3,9 +3,9 @@ import { resolve } from 'node:path'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const versionsPath = resolve(repositoryRoot, 'release', 'versions.json')
-const supportedComponents = new Set(['web', 'wx', 'ios', 'android', 'harmony', 'server'])
+const supportedComponents = new Set(['web', 'wx-pitch', 'wx-practice', 'ios', 'android', 'harmony', 'server'])
 const semanticVersionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/
-const releaseTagPattern = /^(web|wx|ios|android|harmony|server)-v(.+)$/
+const releaseTagPattern = /^(web|wx-pitch|wx-practice|ios|android|harmony|server)-v(.+)$/
 
 async function loadVersions() {
   const versions = JSON.parse(await readFile(versionsPath, 'utf8'))

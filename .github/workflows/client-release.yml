@@ -3,7 +3,8 @@ name: Client Release
 on:
   push:
     tags:
-      - "wx-v*"
+      - "wx-pitch-v*"
+      - "wx-practice-v*"
       - "ios-v*"
       - "android-v*"
 
@@ -29,9 +30,13 @@ jobs:
           component="${GITHUB_REF_NAME%%-v*}"
           node scripts/release-version.mjs github-output "$component" "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
           case "$component" in
-            wx)
-              echo "build_script=build:client:wx" >> "$GITHUB_OUTPUT"
-              echo "artifact_target=wx-artifact" >> "$GITHUB_OUTPUT"
+            wx-pitch)
+              echo "build_script=build:client:wx-pitch" >> "$GITHUB_OUTPUT"
+              echo "artifact_target=wx-pitch-artifact" >> "$GITHUB_OUTPUT"
+              ;;
+            wx-practice)
+              echo "build_script=build:client:wx-practice" >> "$GITHUB_OUTPUT"
+              echo "artifact_target=wx-practice-artifact" >> "$GITHUB_OUTPUT"
               ;;
             ios)
               echo "build_script=build:client:ios" >> "$GITHUB_OUTPUT"
@@ -63,6 +68,8 @@ jobs:
             CLIENT_RELEASE_COMPONENT=${{ steps.release.outputs.component }}
             CLIENT_RELEASE_TAG=${{ github.ref_name }}
             CLIENT_RELEASE_VERSION=${{ steps.release.outputs.version }}
+            PITCH_MINI_PROGRAM_APP_ID=${{ vars.SINGJOURNEY_PITCH_MINI_PROGRAM_APP_ID }}
+            PRACTICE_MINI_PROGRAM_APP_ID=${{ vars.SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID }}
           outputs: type=local,dest=release-artifact
           cache-from: type=gha,scope=client-${{ steps.release.outputs.component }}
           cache-to: type=gha,mode=max,scope=client-${{ steps.release.outputs.component }}

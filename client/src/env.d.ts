@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_RELEASE_COMPONENT?: string
   readonly VITE_RELEASE_VERSION?: string
+  readonly VITE_MINI_PROGRAM_VARIANT?: string
 }
 
 interface ImportMeta {

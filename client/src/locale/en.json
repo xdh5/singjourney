@@ -4,16 +4,17 @@
   },
   "nav": {
     "home": "SingJourney",
-    "record": "Free Recording",
+    "record": "Pitch Meter",
     "recordDetail": "Recording Details",
     "recordings": "Recordings",
     "practice": "Accompanied Practice",
+    "practiceRecordings": "Practice Recordings",
     "practiceStats": "Practice Statistics",
     "share": "Voice Practice Share"
   },
   "home": {
     "subtitle": "See every rise and fall in your voice",
-    "freeRecording": "Free Recording",
+    "freeRecording": "Pitch Meter",
     "freeRecordingDescription": "View and save your pitch curve in real time",
     "recordings": "Recordings",
     "recordingsDescription": "Play and manage your recordings",
@@ -21,8 +22,33 @@
     "accompanimentDescription": "Complete vocal exercises with accompaniment",
     "practiceRecords": "Practice Statistics",
     "practiceRecordsDescription": "Review daily activity and overall progress",
+    "practiceRecordings": "Practice Recordings",
+    "practiceRecordingsDescription": "Replay and manage accompanied practice recordings",
     "comingSoon": "Coming soon",
     "comingSoonToast": "{name} is coming soon"
+  },
+  "miniProgram": {
+    "pitchTitle": "SingJourney Pitch Meter",
+    "pitchSubtitle": "See pitch movement and capture every voice",
+    "practiceTitle": "SingJourney Vocal Practice",
+    "practiceSubtitle": "Follow guided accompaniments and build your practice history",
+    "practiceEyebrow": "Today's practice plan",
+    "practiceToday": "Start practicing"
+  },
+  "login": {
+    "title": "Sign in to SingJourney Practice",
+    "subtitle": "Sign in to track sessions, practice time, and long-term progress",
+    "wechatLogin": "Continue with WeChat",
+    "loggingIn": "Signing in",
+    "failed": "Sign-in failed. Check the service configuration",
+    "privacyNote": "Sign-in identifies your practice account and does not read WeChat conversations."
+  },
+  "practiceRecordings": {
+    "localNotice": "Practice recording reminder",
+    "wechatNotice": "Recordings are currently stored in WeChat on this device. Clearing WeChat data or changing devices may remove them. Download backups when needed.",
+    "empty": "No practice recordings yet",
+    "emptyDescription": "Recordings from completed accompanied practices will appear here.",
+    "start": "Start accompanied practice"
   },
   "record": {
     "save": "Save",
@@ -34,18 +60,19 @@
     "pause": "Pause",
     "play": "Play",
     "download": "Download",
+    "downloaded": "File saved locally",
     "stop": "Stop",
     "continue": "Resume",
     "stopped": "Stopped",
     "record": "Record",
-    "defaultName": "Free Recording",
-    "freeRecordingMode": "Free Recording",
+    "defaultName": "Pitch Meter",
+    "freeRecordingMode": "Pitch Meter",
     "playbackMode": "Recording Playback",
     "aiTitle": "AI Voice Assessment",
     "aiSubtitle": "Five dimensions including pitch and breath",
     "aiComingSoon": "AI assessment is coming soon",
-    "shareMessage": "I recorded “{title}” with SingJourney",
-    "shareSummary": "I recorded “{title}” with SingJourney. Have a listen!",
+    "shareMessage": "I recorded my voice with SingJourney. Come have a listen!",
+    "shareSummary": "I recorded my voice with SingJourney. Come have a listen!",
     "notFound": "Recording not found",
     "saveOrClearFirst": "Save or clear the current recording first",
     "microphonePermissionTitle": "Microphone access required",
@@ -62,18 +89,32 @@
     "exportFailed": "Export failed",
     "generatingShare": "Preparing share",
     "shareReady": "Ready. Tap Share again",
-    "shareFailed": "Could not create share"
+    "shareFailed": "Could not create share",
+    "shareFailureStage": {
+      "preparation": "Audio compression failed. Reopen the recording details and try again.",
+      "intent": "The share API request failed. Check the network and singjourney.com request domain.",
+      "upload": "The R2 upload failed. Check the R2 request domain configuration.",
+      "activation": "The audio uploaded, but server verification failed.",
+      "unknown": "An unknown error occurred. Check the device debugging console."
+    }
   },
   "recordings": {
     "localNotice": "Local storage reminder",
-    "wechatNotice": "Practice recordings are stored in WeChat on this device. Clearing WeChat data or changing devices may remove them. Download backups when needed.",
-    "webNotice": "Practice recordings are stored in this browser. Clearing browser data, using private browsing, or changing browsers may remove them. Download backups when needed.",
-    "appNotice": "Practice recordings are stored on this device. Uninstalling the app, clearing app data, or changing devices may remove them. Download backups when needed.",
+    "wechatNotice": "Recordings are stored only in WeChat on this device and may be lost if WeChat data is cleared or the device changes. Download backups promptly by opening a recording's details.",
+    "webNotice": "Recordings are stored only in this browser and may be lost if browser data is cleared, private browsing is used, or the browser changes. Download backups promptly by opening a recording's details.",
+    "appNotice": "Recordings are stored only on this device and may be lost if the app is uninstalled, app data is cleared, or the device changes. Download backups promptly by opening a recording's details.",
     "empty": "No recordings yet",
-    "start": "Start a free recording",
+    "emptyDescription": "Make your first recording and capture every change in your voice",
+    "start": "Open Pitch Meter",
+    "myRecordings": "My recordings",
+    "select": "Select",
+    "cancelSelection": "Cancel",
+    "pitchMeterTag": "Pitch Meter",
+    "accompaniedPracticeTag": "Accompanied Practice",
     "delete": "Delete",
     "deleteTitle": "Delete recording",
-    "deleteConfirm": "Delete “{name}”?"
+    "deleteConfirm": "Delete “{name}”?",
+    "deleteSelectedConfirm": "Delete {count} selected recordings?"
   },
   "practice": {
     "voicePreset": "Range preset",
@@ -175,7 +216,8 @@
   "practiceStats": {
     "title": "Practice Statistics",
     "subtitle": "Build a steady practice habit and see your progress",
-    "demoBadge": "Demo data",
+    "loadFailed": "Could not load practice statistics",
+    "emptyToday": "No completed practice yet today",
     "today": "Today",
     "total": "All time",
     "sessions": "Sessions",
@@ -198,6 +240,7 @@
   },
   "share": {
     "loading": "Loading share…",
+    "loadingAudio": "Loading audio",
     "play": "Play",
     "pause": "Pause",
     "expiry": "Shared content is available for 7 days",

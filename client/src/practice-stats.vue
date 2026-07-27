@@ -3,7 +3,6 @@
     <view class="intro">
       <view class="intro-heading">
         <text class="title">{{ t('practiceStats.title') }}</text>
-        <text class="demo-badge">{{ t('practiceStats.demoBadge') }}</text>
       </view>
       <text class="subtitle">{{ t('practiceStats.subtitle') }}</text>
     </view>
@@ -60,10 +59,10 @@
           </view>
           <view class="activity-grid">
             <view
-              v-for="(level, index) in activity"
-              :key="index"
+              v-for="day in activity"
+              :key="day.date"
               class="activity-cell"
-              :class="`level-${level}`"
+              :class="`level-${day.level}`"
             />
           </view>
         </view>
@@ -91,30 +90,51 @@
           </view>
         </view>
       </view>
+      <view v-if="!loading && todayExercises.length === 0" class="empty-state">
+        {{ t('practiceStats.emptyToday') }}
+      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import { setPageTitle } from './i18n'
 import {
-  DEMO_PRACTICE_ACTIVITY,
-  DEMO_PRACTICE_SUMMARY,
-  DEMO_TODAY_EXERCISES,
+  EMPTY_PRACTICE_STATISTICS,
+  fetchPracticeStatistics,
+  flushPendingPracticeEvents,
   PRACTICE_ACTIVITY_LEVELS
 } from './shared/practice-statistics'
 
 const { t, tm } = useI18n()
-const summary = DEMO_PRACTICE_SUMMARY
-const todayExercises = DEMO_TODAY_EXERCISES
-const activity = DEMO_PRACTICE_ACTIVITY
+const statistics = ref(EMPTY_PRACTICE_STATISTICS)
+const loading = ref(false)
+const summary = computed(() => statistics.value)
+const todayExercises = computed(() => statistics.value.todayExercises)
+const activity = computed(() => statistics.value.activity)
 const activityLevels = Array.from({ length: PRACTICE_ACTIVITY_LEVELS }, (_, level) => level)
 const weekdays = computed(() => tm('practiceStats.weekdays') as string[])
 
-onShow(() => setPageTitle('nav.practiceStats'))
+onShow(() => {
+  setPageTitle('nav.practiceStats')
+  void loadStatistics()
+})
+
+async function loadStatistics() {
+  if (loading.value) return
+  loading.value = true
+  try {
+    await flushPendingPracticeEvents()
+    statistics.value = await fetchPracticeStatistics()
+  } catch {
+    uni.showToast({ title: t('practiceStats.loadFailed'), icon: 'none' })
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -127,7 +147,6 @@ onShow(() => setPageTitle('nav.practiceStats'))
 .intro { display: flex; flex-direction: column; padding: 4rpx 2rpx 26rpx; }
 .intro-heading { display: flex; align-items: center; gap: 14rpx; }
 .title { color: #294c43; font-size: 40rpx; font-weight: 900; }
-.demo-badge { padding: 7rpx 13rpx; border-radius: 999rpx; color: #527266; background: #e7f0ec; font-size: 19rpx; font-weight: 700; }
 .subtitle { margin-top: 10rpx; color: #6b8179; font-size: 23rpx; }
 .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
 .summary-card,
@@ -176,6 +195,7 @@ onShow(() => setPageTitle('nav.practiceStats'))
 .exercise-title { overflow: hidden; color: #294c43; font-size: 24rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .exercise-duration { flex: none; color: #356b5b; font-size: 22rpx; font-weight: 800; font-variant-numeric: tabular-nums; }
 .exercise-meta { display: flex; align-items: center; gap: 15rpx; margin-top: 12rpx; color: #789087; font-size: 19rpx; }
+.empty-state { padding: 44rpx 20rpx; color: #789087; text-align: center; font-size: 23rpx; }
 .progress-track { flex: 1; height: 9rpx; overflow: hidden; border-radius: 999rpx; background: #e7efeb; }
 .progress-value { height: 100%; border-radius: inherit; background: #6f9d8d; }
 /* #ifdef H5 */

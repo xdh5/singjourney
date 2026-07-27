@@ -115,6 +115,8 @@ jobs:
       SINGJOURNEY_PUBLIC_API_BASE_URL: ${{ vars.SINGJOURNEY_PUBLIC_API_BASE_URL || 'https://singjourney.com/api/v1' }}
       SINGJOURNEY_PUBLIC_SHARE_BASE_URL: ${{ vars.SINGJOURNEY_PUBLIC_SHARE_BASE_URL || 'https://singjourney.com' }}
       SINGJOURNEY_CORS_ORIGINS: ${{ vars.SINGJOURNEY_CORS_ORIGINS || 'https://singjourney.com' }}
+      SINGJOURNEY_WECHAT_PRACTICE_APP_ID: ${{ vars.SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID }}
+      SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET: ${{ secrets.SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -127,6 +129,8 @@ jobs:
           test -n "$SINGJOURNEY_R2_ACCOUNT_ID" || { echo "Missing Actions variable: SINGJOURNEY_R2_ACCOUNT_ID"; exit 1; }
           test -n "$SINGJOURNEY_R2_ACCESS_KEY_ID" || { echo "Missing Actions secret: SINGJOURNEY_R2_ACCESS_KEY_ID"; exit 1; }
           test -n "$SINGJOURNEY_R2_SECRET_ACCESS_KEY" || { echo "Missing Actions secret: SINGJOURNEY_R2_SECRET_ACCESS_KEY"; exit 1; }
+          test -n "$SINGJOURNEY_WECHAT_PRACTICE_APP_ID" || { echo "Missing Actions variable: SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID"; exit 1; }
+          test -n "$SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET" || { echo "Missing Actions secret: SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET"; exit 1; }
 
       - name: Configure SSH
         run: |
@@ -155,6 +159,8 @@ jobs:
             printf 'SINGJOURNEY_PUBLIC_API_BASE_URL=%s\n' "$SINGJOURNEY_PUBLIC_API_BASE_URL"
             printf 'SINGJOURNEY_PUBLIC_SHARE_BASE_URL=%s\n' "$SINGJOURNEY_PUBLIC_SHARE_BASE_URL"
             printf 'SINGJOURNEY_CORS_ORIGINS=%s\n' "$SINGJOURNEY_CORS_ORIGINS"
+            printf 'SINGJOURNEY_WECHAT_PRACTICE_APP_ID=%s\n' "$SINGJOURNEY_WECHAT_PRACTICE_APP_ID"
+            printf 'SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET=%s\n' "$SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET"
             printf 'SINGJOURNEY_DATA_PATH=%s/data\n' "$DEPLOY_PATH"
           } > server-deploy.env
 
