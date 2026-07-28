@@ -18,29 +18,18 @@
       <text>{{ recordLabel }}</text>
     </view>
 
-    <view v-if="showDownload" class="tool-item" :class="{ disabled: downloadDisabled }" role="button" @tap="!downloadDisabled && emit('download')">
-      <view class="tool-icon"><image class="tool-image" src="/static/icons/download.svg" /></view>
-      <text>{{ downloadLabel }}</text>
-    </view>
-
     <view v-if="showSave" class="tool-item" :class="{ disabled: saveDisabled }" role="button" @tap="!saveDisabled && emit('save')">
       <view class="tool-icon"><image class="tool-image" src="/static/icons/save.svg" /></view>
       <text>{{ saveLabel }}</text>
     </view>
 
-    <!-- #ifdef MP-WEIXIN -->
-    <button v-if="!shareDisabled" class="tool-item share-button" open-type="share">
-      <view class="tool-icon"><image class="tool-image" src="/static/icons/share.svg" /></view>
-      <text>{{ shareLabel }}</text>
-    </button>
-    <view v-else class="tool-item disabled" role="button">
-      <view class="tool-icon"><image class="tool-image" src="/static/icons/share.svg" /></view>
-      <text>{{ shareLabel }}</text>
+    <view v-if="showDownload" class="tool-item" :class="{ disabled: downloadDisabled }" role="button" @tap="!downloadDisabled && emit('download')">
+      <view class="tool-icon"><image class="tool-image" src="/static/icons/download.svg" /></view>
+      <text>{{ downloadLabel }}</text>
     </view>
-    <!-- #endif -->
 
     <!-- #ifndef MP-WEIXIN -->
-    <view class="tool-item" :class="{ disabled: shareDisabled }" role="button" @tap="!shareDisabled && emit('share')">
+    <view v-if="showShare" class="tool-item" :class="{ disabled: shareDisabled }" role="button" @tap="!shareDisabled && emit('share')">
       <view class="tool-icon"><image class="tool-image" src="/static/icons/share.svg" /></view>
       <text>{{ shareLabel }}</text>
     </view>
@@ -71,6 +60,7 @@ const props = withDefaults(defineProps<{
   showRecord?: boolean
   showDownload?: boolean
   showSave?: boolean
+  showShare?: boolean
   detailMode?: boolean
 }>(), {
   playbackDisabled: false,
@@ -82,13 +72,20 @@ const props = withDefaults(defineProps<{
   showRecord: true,
   showDownload: true,
   showSave: true,
+  showShare: true,
   detailMode: false
 })
 
-const visibleToolCount = computed(() => 3
+let miniProgramPlatform = false
+// #ifdef MP-WEIXIN
+miniProgramPlatform = true
+// #endif
+
+const visibleToolCount = computed(() => 2
   + Number(props.showRecord)
   + Number(props.showDownload)
-  + Number(props.showSave))
+  + Number(props.showSave)
+  + Number(props.showShare && !miniProgramPlatform))
 
 const emit = defineEmits<{
   clear: []
@@ -108,5 +105,4 @@ const emit = defineEmits<{
 .tool-image { display: block; width: 34rpx; height: 34rpx; }
 .primary-image { width: 38rpx; height: 38rpx; }
 .tool-item.disabled { opacity: 0.4; }
-.share-button::after { border: 0; }
 </style>

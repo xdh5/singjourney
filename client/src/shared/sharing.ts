@@ -120,7 +120,6 @@ function readRecordingShareCache(): Record<string, ActivatedShare> {
 }
 
 export async function createRecordingShare(input: {
-  publicId?: string
   title: string
   durationSeconds: number
   points: StoredPitchPoint[]
@@ -130,7 +129,6 @@ export async function createRecordingShare(input: {
   let intent: ShareUploadIntent
   try {
     intent = await requestJson<ShareUploadIntent>(resolveApiUrl('/shares'), 'POST', {
-      public_id: input.publicId || undefined,
       title: input.title,
       duration_seconds: Math.max(MINIMUM_SHARE_DURATION_SECONDS, roundNumber(input.durationSeconds, SHARE_CURVE_TIME_DECIMAL_PLACES)),
       curve: shareCurve,
