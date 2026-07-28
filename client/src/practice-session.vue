@@ -33,6 +33,8 @@
       :play-label="status === 'playing' ? t('record.pause') : t('record.play')"
       :record-label="practiceRecordLabel"
       :download-label="t('record.download')"
+      :save-label="t('record.save')"
+      :share-label="t('record.share')"
       :is-playing="status === 'playing'"
       :is-recording="isPractising"
       :playback-disabled="!canReplay"
