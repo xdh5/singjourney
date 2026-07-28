@@ -28,6 +28,13 @@
       <text>{{ downloadLabel }}</text>
     </view>
 
+    <!-- #ifdef MP-WEIXIN -->
+    <view v-if="showShare" class="tool-item" :class="{ disabled: shareDisabled }" role="button" @tap="!shareDisabled && emit('download')">
+      <view class="tool-icon"><image class="tool-image" src="/static/icons/share.svg" /></view>
+      <text>{{ shareLabel }}</text>
+    </view>
+    <!-- #endif -->
+
     <!-- #ifndef MP-WEIXIN -->
     <view v-if="showShare" class="tool-item" :class="{ disabled: shareDisabled }" role="button" @tap="!shareDisabled && emit('share')">
       <view class="tool-icon"><image class="tool-image" src="/static/icons/share.svg" /></view>
@@ -76,16 +83,11 @@ const props = withDefaults(defineProps<{
   detailMode: false
 })
 
-let miniProgramPlatform = false
-// #ifdef MP-WEIXIN
-miniProgramPlatform = true
-// #endif
-
 const visibleToolCount = computed(() => 2
   + Number(props.showRecord)
   + Number(props.showDownload)
   + Number(props.showSave)
-  + Number(props.showShare && !miniProgramPlatform))
+  + Number(props.showShare))
 
 const emit = defineEmits<{
   clear: []
