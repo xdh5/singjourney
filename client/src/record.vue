@@ -92,6 +92,7 @@ import { formatRecordingName, formatTime, getPlaybackSource, getRecording, RECOR
 import { exportAudio } from './platform/export-audio'
 import { createPitchCanvasSurface } from './platform/pitch-canvas'
 import { createPcmPreview, deleteTemporaryAudio } from './platform/audio-files'
+import { downloadRemoteAudioForPlayback } from './platform/remote-audio'
 import { prepareShareAudio } from './platform/share-audio'
 import {
   cacheRecordingShare,
@@ -130,6 +131,7 @@ const SHARE_PUBLIC_ID_RANDOM_BYTES = 16
 const SHARE_PENDING_POLL_INTERVAL_MS = 1500
 const SHARE_PENDING_WAIT_MS = 120000
 const SHARE_NOT_FOUND_GRACE_MS = 6000
+const REMOTE_PLAYBACK_LOAD_TIMEOUT_MS = 15000
 const ROW_HEIGHT = 18
 const AXIS_WIDTH = 52
 const PIXELS_PER_SECOND = 72
@@ -239,7 +241,11 @@ let pcmBlockOffset = 0
 let pcmByteLength = 0
 let previewAudioPath = ''
 let remoteSharedAudioUrl = ''
+let remoteSharedShareId = ''
+let remotePlaybackFallbackPath = ''
+let remotePlaybackFallbackAttempted = false
 let remotePlaybackLoading = false
+let remotePlaybackLoadTimer: ReturnType<typeof setTimeout> | undefined
 let currentRecordingId = ''
 let durationWarningShown = false
 let durationLimitHandled = false
@@ -275,7 +281,6 @@ const disconnectRecorder = connectRecorder({
 
 player.onTimeUpdate(syncPlaybackPosition)
 player.onCanplay(() => {
-  if (remoteSharedAudioUrl && playerSourcePath === remoteSharedAudioUrl) hideRemotePlaybackLoading()
   if (!playbackStarting || pendingPlayerSeek === null) return
   const position = pendingPlayerSeek
   pendingPlayerSeek = null
@@ -287,6 +292,7 @@ player.onCanplay(() => {
   player.seek(position)
 })
 player.onPlay(() => {
+  clearRemotePlaybackLoadTimer()
   hideRemotePlaybackLoading()
   if (!playbackStarting) return
   playbackStarting = false
@@ -330,7 +336,8 @@ player.onEnded(() => {
   updateClock()
   draw()
 })
-player.onError(() => {
+player.onError(error => {
+  clearRemotePlaybackLoadTimer()
   const remotePlaybackFailed = Boolean(remoteSharedAudioUrl && playerSourcePath === remoteSharedAudioUrl)
   hideRemotePlaybackLoading()
   isPlaying.value = false
@@ -339,7 +346,14 @@ player.onError(() => {
   awaitingPlayerSeek = null
   clearTimer()
   clearRenderTimer()
-  if (remotePlaybackFailed) uni.showToast({ title: t('share.playFailed'), icon: 'none' })
+  if (remotePlaybackFailed && !remotePlaybackFallbackAttempted) {
+    void retryRemotePlaybackFromLocalFile(playbackStartPosition)
+    return
+  }
+  if (remotePlaybackFailed || remotePlaybackFallbackAttempted) {
+    console.error('Unable to play shared recording', error)
+    uni.showToast({ title: t('share.playFailed'), icon: 'none' })
+  }
 })
 ;(player as any).onWaiting?.(() => {
   if (remoteSharedAudioUrl && playerSourcePath === remoteSharedAudioUrl) showRemotePlaybackLoading()
@@ -354,6 +368,7 @@ onShow(lockDocumentScroll)
 onHide(unlockDocumentScroll)
 onUnload(() => {
   hideRemotePlaybackLoading()
+  clearRemotePlaybackLoadTimer()
   unlockDocumentScroll()
   clearTimer()
   clearRenderTimer()
@@ -368,6 +383,7 @@ onUnload(() => {
   pitchWorker = null
   workerBusy = false
   deleteTemporaryAudio(previewAudioPath)
+  deleteTemporaryAudio(remotePlaybackFallbackPath)
   player.destroy()
 })
 
@@ -445,6 +461,8 @@ async function loadSharedRecording(shareId: string) {
     hasManualSeek = false
     playablePath.value = share.audio_url
     remoteSharedAudioUrl = share.audio_url
+    remoteSharedShareId = share.id
+    remotePlaybackFallbackAttempted = false
     exportName = share.title
     const lastVoicedPoint = [...points].reverse().find(point => point.midi !== null)
     if (lastVoicedPoint?.midi !== null && lastVoicedPoint?.midi !== undefined) {
@@ -915,6 +933,10 @@ async function togglePlayback() {
   playerHasSource = true
   playerSourcePath = playablePath.value
   ;(player as any).startTime = playbackPosition.value
+  if (remoteSharedAudioUrl && playablePath.value === remoteSharedAudioUrl) {
+    scheduleRemotePlaybackLoadTimeout(playbackPosition.value, requestId)
+    return
+  }
   // InnerAudioContext may not emit canplay for an already prepared local
   // preview. Start immediately and let it finish loading internally; otherwise
   // the first tap only assigns src and the second tap is the one that plays.
@@ -922,10 +944,60 @@ async function togglePlayback() {
   startPreparedPlayback(playbackPosition.value)
 }
 
+async function retryRemotePlaybackFromLocalFile(position: number) {
+  if (!remoteSharedShareId) {
+    uni.showToast({ title: t('share.playFailed'), icon: 'none' })
+    return
+  }
+  remotePlaybackFallbackAttempted = true
+  const requestId = playbackRequestId
+  playbackStarting = true
+  showRemotePlaybackLoading()
+  try {
+    const refreshedShare = await getPublicRecordingShare(remoteSharedShareId, true)
+    const fallbackPath = await downloadRemoteAudioForPlayback(refreshedShare.audio_url)
+    if (requestId !== playbackRequestId) {
+      deleteTemporaryAudio(fallbackPath)
+      return
+    }
+    deleteTemporaryAudio(remotePlaybackFallbackPath)
+    remotePlaybackFallbackPath = fallbackPath
+    playablePath.value = fallbackPath
+    remoteSharedAudioUrl = refreshedShare.audio_url
+    player.src = fallbackPath
+    playerHasSource = true
+    playerSourcePath = fallbackPath
+    pendingPlayerSeek = null
+    awaitingPlayerSeek = null
+    startPreparedPlayback(position)
+  } catch (error) {
+    console.error('Unable to cache shared recording for playback', error)
+    playbackStarting = false
+    hideRemotePlaybackLoading()
+    uni.showToast({ title: t('share.playFailed'), icon: 'none' })
+  }
+}
+
 function showRemotePlaybackLoading() {
   if (remotePlaybackLoading) return
   remotePlaybackLoading = true
   uni.showLoading({ title: t('share.loadingAudio'), mask: true })
+}
+
+function scheduleRemotePlaybackLoadTimeout(position: number, requestId: number) {
+  clearRemotePlaybackLoadTimer()
+  remotePlaybackLoadTimer = setTimeout(() => {
+    remotePlaybackLoadTimer = undefined
+    if (requestId !== playbackRequestId || !playbackStarting) return
+    pendingPlayerSeek = null
+    awaitingPlayerSeek = null
+    void retryRemotePlaybackFromLocalFile(position)
+  }, REMOTE_PLAYBACK_LOAD_TIMEOUT_MS)
+}
+
+function clearRemotePlaybackLoadTimer() {
+  if (remotePlaybackLoadTimer) clearTimeout(remotePlaybackLoadTimer)
+  remotePlaybackLoadTimer = undefined
 }
 
 function hideRemotePlaybackLoading() {
@@ -941,6 +1013,7 @@ function stopPlayback() {
   awaitingPlayerSeek = null
   playbackStarting = false
   isPlaying.value = false
+  clearRemotePlaybackLoadTimer()
   hideRemotePlaybackLoading()
   if (playerHasSource) {
     ignoreEndedBefore = Date.now() + 500

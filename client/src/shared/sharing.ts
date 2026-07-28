@@ -87,11 +87,11 @@ export function cacheRecordingShare(recordingId: string, share: ActivatedShare) 
   uni.setStorageSync(RECORDING_SHARE_CACHE_KEY, cache)
 }
 
-export async function getPublicRecordingShare(id: string) {
+export async function getPublicRecordingShare(id: string, forceFreshAudioUrl = false) {
   const share = await requestJson<PublicRecordingShare>(resolveApiUrl(`/shares/${encodeURIComponent(id)}`), 'GET')
   const cache = readPublicAudioUrlCache()
   const cached = cache[id]
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!forceFreshAudioUrl && cached && cached.expiresAt > Date.now()) {
     share.audio_url = cached.url
     return share
   }
