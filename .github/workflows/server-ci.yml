@@ -129,8 +129,6 @@ jobs:
           test -n "$SINGJOURNEY_R2_ACCOUNT_ID" || { echo "Missing Actions variable: SINGJOURNEY_R2_ACCOUNT_ID"; exit 1; }
           test -n "$SINGJOURNEY_R2_ACCESS_KEY_ID" || { echo "Missing Actions secret: SINGJOURNEY_R2_ACCESS_KEY_ID"; exit 1; }
           test -n "$SINGJOURNEY_R2_SECRET_ACCESS_KEY" || { echo "Missing Actions secret: SINGJOURNEY_R2_SECRET_ACCESS_KEY"; exit 1; }
-          test -n "$SINGJOURNEY_WECHAT_PRACTICE_APP_ID" || { echo "Missing Actions variable: SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID"; exit 1; }
-          test -n "$SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET" || { echo "Missing Actions secret: SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET"; exit 1; }
 
       - name: Configure SSH
         run: |
