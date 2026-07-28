@@ -92,7 +92,7 @@
     "shareFailed": "Could not create share",
     "shareFailureStage": {
       "preparation": "Audio compression failed. Reopen the recording details and try again.",
-      "intent": "The share API request failed. Check the network and singjourney.com request domain.",
+      "intent": "The share API request failed. The specific server response is shown below.",
       "upload": "The R2 upload failed. Check the R2 request domain configuration.",
       "activation": "The audio uploaded, but server verification failed.",
       "unknown": "An unknown error occurred. Check the device debugging console."

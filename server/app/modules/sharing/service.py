@@ -62,14 +62,17 @@ def initiate_share(
     )
     db.add(asset)
     db.flush()
-    share = RecordingShare(
-        audio_asset_id=asset.id,
-        title=request.title.strip(),
-        duration_seconds=request.duration_seconds,
-        curve_data=[point.model_dump() for point in request.curve],
-        delete_token_hash=_hash_token(delete_token),
-        expires_at=expires_at,
-    )
+    share_values = {
+        "audio_asset_id": asset.id,
+        "title": request.title.strip(),
+        "duration_seconds": request.duration_seconds,
+        "curve_data": [point.model_dump() for point in request.curve],
+        "delete_token_hash": _hash_token(delete_token),
+        "expires_at": expires_at,
+    }
+    if request.public_id:
+        share_values["public_id"] = str(request.public_id)
+    share = RecordingShare(**share_values)
     db.add(share)
     db.flush()
     upload_url = storage.create_upload_url(storage_key, request.audio.mime_type)
@@ -136,6 +139,12 @@ def get_share(
 
 def get_share_audio(db: Session, public_id: str) -> tuple[RecordingShare, AudioAsset] | None:
     return _get_share_audio(db, public_id)
+
+
+def is_share_pending(db: Session, public_id: str) -> bool:
+    """Report whether a share ID exists but its direct R2 upload is not ready yet."""
+    row = _get_share_audio(db, public_id, include_pending=True)
+    return bool(row and row[1].upload_status == UPLOAD_STATUS_PENDING)
 
 
 def delete_share(

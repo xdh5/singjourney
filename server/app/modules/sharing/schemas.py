@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,10 @@ class AudioUploadRequest(BaseModel):
 
 
 class ShareCreateRequest(BaseModel):
+    public_id: UUID | None = Field(
+        default=None,
+        description="Client-generated opaque UUID used when a share card needs its destination before upload finishes.",
+    )
     title: str = Field(min_length=1, max_length=MAX_SHARE_TITLE_LENGTH)
     duration_seconds: float = Field(gt=0, le=MAX_SHARE_DURATION_SECONDS)
     curve: list[PitchPoint]

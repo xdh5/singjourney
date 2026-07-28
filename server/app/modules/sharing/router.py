@@ -21,6 +21,7 @@ from app.modules.sharing.service import (
     get_share,
     get_share_audio,
     initiate_share,
+    is_share_pending,
 )
 from app.storage import get_object_storage
 from app.storage.r2 import R2ConfigurationError, R2Storage
@@ -42,9 +43,11 @@ def require_object_storage() -> R2Storage:
     status_code=status.HTTP_201_CREATED,
     summary="Create a direct-upload intent for an expiring recording share",
     description=(
-        "Validates share metadata, reserves a private R2 object key, and returns a short-lived "
-        "PUT URL. The audio bytes go directly from the client to R2 and never traverse this API. "
-        "Call the completion endpoint after PUT succeeds; pending shares are not publicly readable."
+        "Validates share metadata, optionally accepts a client-generated opaque public UUID, "
+        "reserves a private R2 object key, and returns a short-lived PUT URL. Accepting the UUID "
+        "lets a mini-program share card point at the recording before its click-triggered upload "
+        "finishes. The audio bytes go directly from the client to R2 and never traverse this API. "
+        "Call the completion endpoint after PUT succeeds; pending shares return HTTP 425."
     ),
     responses={
         201: {"description": "Upload intent created; the R2 credential is limited to one PUT."},
@@ -111,7 +114,11 @@ def finish_share(
     response_model=SharePublic,
     summary="Read a public recording share",
     description="Returns curve metadata for a verified, unexpired share and increments its view count.",
-    responses={404: {"description": "The share does not exist, is pending, or has expired."}},
+    responses={
+        200: {"description": "Verified share metadata and a short-lived direct R2 playback URL."},
+        404: {"description": "The share does not exist or has expired."},
+        425: {"description": "The sender is still uploading or activating this share."},
+    },
 )
 def read_share(
     public_id: str,
@@ -120,6 +127,8 @@ def read_share(
 ) -> SharePublic:
     share = get_share(db, storage, public_id)
     if not share:
+        if is_share_pending(db, public_id):
+            raise HTTPException(status_code=425, detail="Share upload is still being activated")
         raise HTTPException(status_code=404, detail="Share not found or expired")
     return share
 

@@ -92,7 +92,7 @@
     "shareFailed": "生成分享失败",
     "shareFailureStage": {
       "preparation": "录音压缩失败，请重新进入录音详情后再试。",
-      "intent": "分享接口请求失败，请检查网络和 singjourney.com 请求域名。",
+      "intent": "分享接口请求失败，下面是服务端返回的具体原因。",
       "upload": "录音上传到 R2 失败，请检查 R2 request 合法域名配置。",
       "activation": "录音已上传，但服务端校验失败。",
       "unknown": "发生未知错误，请查看真机调试控制台。"

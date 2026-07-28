@@ -98,6 +98,7 @@ import {
   createRecordingShare,
   getCachedRecordingShare,
   getPublicRecordingShare,
+  ShareApiError,
   ShareFlowError,
   type ActivatedShare
 } from './shared/sharing'
@@ -125,6 +126,10 @@ const SAMPLE_RATE = recorderAnalysisConfig.sampleRate
 const BUFFER_SIZE = recorderAnalysisConfig.frameSize
 const MIN_MIDI = PITCH_MINIMUM_MIDI
 const MAX_MIDI = PITCH_MAXIMUM_MIDI
+const SHARE_PUBLIC_ID_RANDOM_BYTES = 16
+const SHARE_PENDING_POLL_INTERVAL_MS = 1500
+const SHARE_PENDING_WAIT_MS = 120000
+const SHARE_NOT_FOUND_GRACE_MS = 6000
 const ROW_HEIGHT = 18
 const AXIS_WIDTH = 52
 const PIXELS_PER_SECOND = 72
@@ -239,6 +244,7 @@ let currentRecordingId = ''
 let durationWarningShown = false
 let durationLimitHandled = false
 let sharePreparationPromise: Promise<ActivatedShare> | null = null
+let pendingSharePublicId = ''
 
 const recordLabel = computed(() => {
   if (isRecording.value) return recorderCapabilities.pause ? t('record.pause') : t('record.stop')
@@ -368,8 +374,15 @@ onUnload(() => {
 onShareAppMessage(() => {
   if (sharedShareReference.value) return createMiniProgramShareMessage(sharedShareReference.value)
   if (preparedShare.value) return createMiniProgramShareMessage(preparedShare.value)
-  const fallback = { title: t('app.name'), path: '/home' }
+  const fallback = { title: t('app.name'), path: '/pitch-home' }
   if (!playablePath.value) return fallback
+  if (pendingSharePublicId) {
+    const publicId = pendingSharePublicId
+    pendingSharePublicId = ''
+    void prepareNextSharePublicId()
+    void ensurePreparedShare(publicId).catch(showShareFailure)
+    return createMiniProgramShareMessage({ id: publicId, title: exportName })
+  }
   return {
     ...fallback,
     promise: ensurePreparedShare()
@@ -382,6 +395,7 @@ onShareAppMessage(() => {
 })
 
 async function loadRecordingDetail(options: Record<string, string | undefined> = {}) {
+  void prepareNextSharePublicId()
   const shareId = options?.shareId ? decodeURIComponent(options.shareId) : ''
   const id = options?.id ? decodeURIComponent(options.id) : ''
   setPageTitle('app.name')
@@ -420,8 +434,9 @@ async function loadRecordingDetail(options: Record<string, string | undefined> =
 
 async function loadSharedRecording(shareId: string) {
   recordingDetailMode.value = true
+  uni.showLoading({ title: t('share.loading'), mask: true })
   try {
-    const share = await getPublicRecordingShare(shareId)
+    const share = await waitForSharedRecording(shareId)
     sharedShareReference.value = { id: share.id, title: share.title }
     points.splice(0, points.length, ...(Array.isArray(share.curve) ? share.curve : []))
     elapsed = Math.max(0, share.duration_seconds || 0)
@@ -443,6 +458,24 @@ async function loadSharedRecording(shareId: string) {
   } catch {
     uni.showToast({ title: t('share.expired'), icon: 'none' })
     setTimeout(() => uni.reLaunch({ url: '/pitch-home' }), 800)
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+async function waitForSharedRecording(shareId: string) {
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      return await getPublicRecordingShare(shareId)
+    } catch (error) {
+      const waitingForUpload = error instanceof ShareApiError && (
+        error.statusCode === 425
+        || (error.statusCode === 404 && Date.now() - startedAt < SHARE_NOT_FOUND_GRACE_MS)
+      )
+      if (!waitingForUpload || Date.now() - startedAt >= SHARE_PENDING_WAIT_MS) throw error
+      await new Promise(resolve => setTimeout(resolve, SHARE_PENDING_POLL_INTERVAL_MS))
+    }
   }
 }
 
@@ -1092,10 +1125,10 @@ async function shareRecording() {
   }
 }
 
-function ensurePreparedShare() {
+function ensurePreparedShare(publicId?: string) {
   if (preparedShare.value) return Promise.resolve(preparedShare.value)
   if (sharePreparationPromise) return sharePreparationPromise
-  sharePreparationPromise = createPreparedShare()
+  sharePreparationPromise = createPreparedShare(publicId)
     .finally(() => {
       sharePreparationPromise = null
       sharing.value = false
@@ -1104,7 +1137,7 @@ function ensurePreparedShare() {
   return sharePreparationPromise
 }
 
-async function createPreparedShare() {
+async function createPreparedShare(publicId?: string) {
   let audio
   try {
     audio = await prepareShareAudio(playablePath.value, tempBlob)
@@ -1112,6 +1145,7 @@ async function createPreparedShare() {
     throw new ShareFlowError('preparation', error)
   }
   const share = await createRecordingShare({
+    publicId,
     title: exportName || formatRecordingName(new Date(), defaultRecordingName.value),
     durationSeconds: elapsed,
     points: [...points],
@@ -1120,6 +1154,28 @@ async function createPreparedShare() {
   preparedShare.value = share
   cacheRecordingShare(currentRecordingId, share)
   return share
+}
+
+function prepareNextSharePublicId() {
+  if (!miniProgramPlatform || pendingSharePublicId) return Promise.resolve()
+  const wxApi = (globalThis as any).wx
+  if (!wxApi?.getRandomValues) return Promise.resolve()
+  return new Promise<void>(resolve => {
+    wxApi.getRandomValues({
+      length: SHARE_PUBLIC_ID_RANDOM_BYTES,
+      success: (result: { randomValues: ArrayBuffer }) => {
+        pendingSharePublicId = formatUuidV4(new Uint8Array(result.randomValues))
+      },
+      complete: resolve
+    })
+  })
+}
+
+function formatUuidV4(bytes: Uint8Array) {
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function createMiniProgramShareMessage(share: Pick<ActivatedShare, 'id' | 'title'>) {
@@ -1132,9 +1188,18 @@ function createMiniProgramShareMessage(share: Pick<ActivatedShare, 'id' | 'title
 async function showShareFailure(error: unknown) {
   console.error('Unable to create recording share', error)
   const stage = error instanceof ShareFlowError ? error.stage : 'unknown'
+  const cause = error instanceof ShareFlowError ? error.cause : error
+  const apiError = cause instanceof ShareApiError ? cause : null
+  const diagnostic = apiError
+    ? apiError.statusCode === null
+      ? apiError.requestError
+      : `HTTP ${apiError.statusCode}${apiError.detail ? `：${apiError.detail}` : ''}`
+    : cause instanceof Error
+      ? cause.message
+      : ''
   await uni.showModal({
     title: t('record.shareFailed'),
-    content: t(`record.shareFailureStage.${stage}`),
+    content: `${t(`record.shareFailureStage.${stage}`)}${diagnostic ? `\n${diagnostic}` : ''}`,
     showCancel: false
   })
 }
