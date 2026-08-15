@@ -1,7 +1,7 @@
 {
-  "client": "0.1.0",
+  "client": "0.2.0",
   "client/targets/web": "0.2.0",
   "client/targets/app": "0.1.0",
-  "client/targets/wx": "0.1.0",
-  "server": "0.1.0"
+  "client/targets/wx": "0.2.0",
+  "server": "0.2.0"
 }
