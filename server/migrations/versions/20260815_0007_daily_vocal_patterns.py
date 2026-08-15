@@ -3,11 +3,52 @@
 import sqlalchemy as sa
 from alembic import op
 
+from app.modules.practice.models import (
+    PracticeCategory,
+    PracticeExercise,
+    PracticeExerciseCategory,
+)
+
 
 revision = "20260815_0007"
-down_revision = "20260815_0006"
+down_revision = "20260815_0005"
 branch_labels = None
 depends_on = None
+
+
+CATEGORIES = [
+    {"key": "natural", "name_zh_hans": "基础发声", "name_en": "Fundamentals", "sort_order": 10, "active": True},
+    {"key": "connection", "name_zh_hans": "声带闭合", "name_en": "Vocal Fold Closure", "sort_order": 20, "active": True},
+    {"key": "passaggio", "name_zh_hans": "声区连接", "name_en": "Register Connection", "sort_order": 30, "active": True},
+    {"key": "range", "name_zh_hans": "音域拓展", "name_en": "Range Extension", "sort_order": 40, "active": True},
+    {"key": "mix", "name_zh_hans": "混声强化", "name_en": "Mixed Voice", "sort_order": 50, "active": True},
+]
+
+EXTRA_TAGS = {
+    "natural-tongue-trill-five": ("passaggio",),
+    "natural-ng-octave-glide": ("passaggio",),
+    "natural-v-five": ("connection",),
+    "connection-gug-five": ("mix",),
+    "mix-gee-staccato-arpeggio": ("mix",),
+    "closure-vee-fifth": ("natural",),
+    "closure-mum-triad-repeat": ("mix",),
+    "closure-gug-octave": ("passaggio", "mix"),
+    "connection-mum-octave": ("mix",),
+    "passaggio-gee-long-scale": ("range",),
+    "register-woo-octave-glide": ("natural",),
+    "register-ng-ah-octave": ("natural",),
+    "register-mum-fifth-octave": ("mix",),
+    "register-noo-descending-octave": ("range",),
+    "range-lip-trill-twelfth": ("natural", "passaggio"),
+    "range-noo-octave-scale": ("passaggio",),
+    "range-two-octave-descending": ("passaggio",),
+    "mix-nay-five": ("connection",),
+    "mix-mum-octave-repeat": ("passaggio",),
+    "passaggio-nay-octave": ("connection", "passaggio"),
+    "mix-no-octave": ("passaggio",),
+    "mix-yeah-five": ("connection",),
+    "mix-mum-tenth": ("passaggio", "range"),
+}
 
 
 EXERCISES = [
@@ -49,56 +90,31 @@ EXERCISES = [
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    bind.execute(sa.text("UPDATE practice_categories SET name_zh_hans = :name, name_en = :name_en WHERE key = :key"), [
-        {"key": "natural", "name": "基础发声", "name_en": "Fundamentals"},
-        {"key": "connection", "name": "声带闭合", "name_en": "Vocal Fold Closure"},
-        {"key": "passaggio", "name": "声区连接", "name_en": "Register Connection"},
-        {"key": "range", "name": "音域拓展", "name_en": "Range Extension"},
-        {"key": "mix", "name": "混声强化", "name_en": "Mixed Voice"},
-    ])
-    rows = [
+    exercise_rows = [
         {
-            "id": row[0], "category_key": row[1], "title_zh_hans": row[2], "title_en": row[3],
+            "id": row[0], "title_zh_hans": row[2], "title_en": row[3],
             "tip_zh_hans": row[4], "tip_en": row[5], "pattern": row[6],
             "recommended_syllables": row[7], "tempo": row[8], "repetitions": row[9],
             "intensity": row[10], "enabled": True, "sort_order": index * 10,
         }
         for index, row in enumerate(EXERCISES, start=1)
     ]
-    update_statement = sa.text("""
-        UPDATE practice_exercises
-        SET category_key = :category_key,
-            title_zh_hans = :title_zh_hans,
-            title_en = :title_en,
-            tip_zh_hans = :tip_zh_hans,
-            tip_en = :tip_en,
-            pattern = :pattern,
-            recommended_syllables = :recommended_syllables,
-            tempo = :tempo,
-            repetitions = :repetitions,
-            intensity = :intensity,
-            enabled = :enabled,
-            sort_order = :sort_order
-        WHERE id = :id
-    """)
-    insert_statement = sa.text("""
-        INSERT INTO practice_exercises (
-            id, category_key, title_zh_hans, title_en, tip_zh_hans, tip_en,
-            pattern, recommended_syllables, tempo, repetitions, intensity, enabled, sort_order
-        ) VALUES (
-            :id, :category_key, :title_zh_hans, :title_en, :tip_zh_hans, :tip_en,
-            :pattern, :recommended_syllables, :tempo, :repetitions, :intensity, :enabled, :sort_order
+    category_rows = []
+    for index, row in enumerate(EXERCISES, start=1):
+        exercise_id, primary_category = row[0], row[1]
+        category_rows.append({"exercise_id": exercise_id, "category_key": primary_category, "sort_order": 0})
+        category_rows.extend(
+            {"exercise_id": exercise_id, "category_key": category_key, "sort_order": tag_index * 10}
+            for tag_index, category_key in enumerate(EXTRA_TAGS.get(exercise_id, ()), start=1)
+            if category_key != primary_category
         )
-    """)
-    for row in rows:
-        result = bind.execute(update_statement, row)
-        if result.rowcount == 0:
-            bind.execute(insert_statement, row)
-    bind.execute(sa.text(
-        "DELETE FROM practice_exercises WHERE id = 'natural-lip-trill-octave'"
-    ))
+    op.bulk_insert(PracticeCategory.__table__, CATEGORIES)
+    op.bulk_insert(PracticeExercise.__table__, exercise_rows)
+    op.bulk_insert(PracticeExerciseCategory.__table__, category_rows)
 
 
 def downgrade() -> None:
-    pass
+    bind = op.get_bind()
+    bind.execute(sa.text("DELETE FROM practice_exercise_categories"))
+    bind.execute(sa.text("DELETE FROM practice_exercises"))
+    bind.execute(sa.text("DELETE FROM practice_categories"))

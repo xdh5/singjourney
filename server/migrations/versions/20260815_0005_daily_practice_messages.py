@@ -3,9 +3,11 @@
 import sqlalchemy as sa
 from alembic import op
 
+from app.modules.practice.models import DailyPracticeMessage
+
 
 revision = "20260815_0005"
-down_revision = "20260815_0004"
+down_revision = "20260720_0001"
 branch_labels = None
 depends_on = None
 
@@ -45,19 +47,11 @@ MESSAGES = [
 
 
 def upgrade() -> None:
-    table = op.create_table(
-        "daily_practice_messages",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("content_zh_hans", sa.String(120), nullable=False),
-        sa.Column("content_en", sa.String(200), nullable=False),
-        sa.Column("active", sa.Boolean(), nullable=False),
-    )
-    op.create_index("ix_daily_practice_messages_active", "daily_practice_messages", ["active"])
-    op.bulk_insert(table, [
+    op.bulk_insert(DailyPracticeMessage.__table__, [
         {"id": index, "content_zh_hans": zh, "content_en": en, "active": True}
         for index, (zh, en) in enumerate(MESSAGES, start=1)
     ])
 
 
 def downgrade() -> None:
-    op.drop_table("daily_practice_messages")
+    op.get_bind().execute(sa.text("DELETE FROM daily_practice_messages"))
