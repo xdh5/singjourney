@@ -1,23 +1,22 @@
-from contextlib import asynccontextmanager
+import logging
+from time import perf_counter
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.core.release import get_release_manifest, get_server_version
+from app.core.logging import configure_structured_logging
+from app.core.release import get_api_major, get_server_version
 from app.db.session import engine
 
 
+configure_structured_logging()
+LOGGER = logging.getLogger("singjourney.api")
 settings = get_settings()
 server_version = get_server_version()
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    settings.storage_root.mkdir(parents=True, exist_ok=True)
-    yield
 
 
 app = FastAPI(
@@ -25,16 +24,49 @@ app = FastAPI(
     version=server_version,
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url=None,
-    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Share-Delete-Token"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 app.include_router(api_router, prefix=settings.api_prefix)
+
+
+@app.middleware("http")
+async def log_api_request(request: Request, call_next):
+    """Record bounded request metadata and server failures without query strings or bodies."""
+
+    request_id = uuid4().hex
+    started_at = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        LOGGER.exception(
+            "request_failed",
+            extra={"request_data": {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+            }},
+        )
+        raise
+    if not request.url.path.startswith("/health/"):
+        LOGGER.info(
+            "request_completed",
+            extra={"request_data": {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+            }},
+        )
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.get("/health/live", tags=["health"])
@@ -62,8 +94,7 @@ def health_ready() -> dict[str, str]:
 def read_version() -> dict[str, str | int]:
     """Expose immutable release metadata for diagnostics and compatibility checks."""
 
-    release_manifest = get_release_manifest()
     return {
         "serverVersion": server_version,
-        "apiMajor": release_manifest["apiCompatibility"]["currentMajor"],
+        "apiMajor": get_api_major(),
     }

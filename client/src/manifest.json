@@ -1,6 +1,7 @@
 {
   "name": "声刻度",
   "appid": "__UNI__SINGJOURNEY",
+  "locale": "zh-Hans",
   "description": "声刻度",
   "versionName": "1.0.0",
   "versionCode": "100",
@@ -29,10 +30,7 @@
     "lazyCodeLoading": "requiredComponents",
     "workers": "static/workers",
     "setting": { "urlCheck": false },
-    "usingComponents": true,
-    "permission": {
-      "scope.record": { "desc": "用于录制声音并分析音高" }
-    }
+    "usingComponents": true
   },
   "h5": {
     "title": "声刻度",

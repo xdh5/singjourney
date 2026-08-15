@@ -25,4 +25,3 @@ globalThis.onmessage = (event: MessageEvent) => {
   const result = getEngine(message.sampleRate).analyze(message.buffer, message.time)
   globalThis.postMessage(result)
 }
-

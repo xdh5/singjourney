@@ -27,7 +27,7 @@ def render_practice_score(score: PracticeScore, output_directory: Path, soundfon
     """
 
     output_directory.mkdir(parents=True, exist_ok=True)
-    stem = f"{score.exercise_key}-v{score.version}-{score.voice}"
+    stem = f"{score.exercise_key}-v{score.version}-master"
     midi_path = output_directory / f"{stem}.mid"
     wav_path = output_directory / f"{stem}.wav"
     opus_path = output_directory / f"{stem}.opus"
@@ -41,7 +41,8 @@ def render_practice_score(score: PracticeScore, output_directory: Path, soundfon
     subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(wav_path),
         "-t", str(score.duration), "-af", ACCOMPANIMENT_LOUDNESS_FILTER,
-        "-ac", "1", "-c:a", "libopus", "-b:a", OPUS_BITRATE, str(opus_path),
+        "-ac", "1", "-c:a", "libopus", "-b:a", OPUS_BITRATE,
+        "-vbr", "off", "-application", "audio", str(opus_path),
     ], check=True)
     manifest_path.write_text(
         json.dumps(score.manifest(f"/static/practice/{opus_path.name}"), ensure_ascii=False, separators=(",", ":")),

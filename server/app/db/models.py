@@ -3,8 +3,15 @@
 from app.modules.accounts.models import AuthIdentity, AuthSession, User
 from app.modules.evaluations.models import Evaluation, EvaluationDimension
 from app.modules.media.models import AudioAsset, Recording
-from app.modules.practice.models import Accompaniment, PracticeSession
-from app.modules.sharing.models import RecordingShare
+from app.modules.practice.models import (
+    Accompaniment,
+    DailyPracticeMessage,
+    PracticeCategory,
+    PracticeExercise,
+    PracticeExerciseCategory,
+    PracticeFavorite,
+    PracticeSession,
+)
 
 __all__ = [
     "Accompaniment",
@@ -13,9 +20,12 @@ __all__ = [
     "AuthSession",
     "Evaluation",
     "EvaluationDimension",
+    "DailyPracticeMessage",
     "PracticeSession",
+    "PracticeCategory",
+    "PracticeExercise",
+    "PracticeExerciseCategory",
+    "PracticeFavorite",
     "Recording",
-    "RecordingShare",
     "User",
 ]
-

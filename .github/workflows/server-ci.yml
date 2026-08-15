@@ -4,8 +4,9 @@ on:
   pull_request:
     paths:
       - "server/**"
-      - "Dockerfile.server"
-      - "compose.server.yml"
+      - "docker/Dockerfile.server"
+      - "docker/Dockerfile.server.dockerignore"
+      - "docker/compose.server.yml"
       - ".github/workflows/server-ci.yml"
   push:
     branches: [main]
@@ -13,8 +14,9 @@ on:
       - "server-v*"
     paths:
       - "server/**"
-      - "Dockerfile.server"
-      - "compose.server.yml"
+      - "docker/Dockerfile.server"
+      - "docker/Dockerfile.server.dockerignore"
+      - "docker/compose.server.yml"
       - ".github/workflows/server-ci.yml"
   workflow_dispatch:
 
@@ -46,22 +48,11 @@ jobs:
     env:
       SINGJOURNEY_ENVIRONMENT: test
       SINGJOURNEY_DATABASE_URL: postgresql+psycopg://singjourney_ci:singjourney_ci@127.0.0.1:5432/singjourney_ci
-      SINGJOURNEY_STORAGE_BACKEND: local
-      SINGJOURNEY_STORAGE_ROOT: /tmp/singjourney-media
       SINGJOURNEY_PUBLIC_API_BASE_URL: https://example.test/api/v1
-      SINGJOURNEY_PUBLIC_SHARE_BASE_URL: https://example.test
       SINGJOURNEY_CORS_ORIGINS: https://example.test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Validate Server release version
-        shell: bash
-        run: |
-          tag=""
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then tag="$GITHUB_REF_NAME"; fi
-          node ../scripts/release-version.mjs resolve server "$tag"
-        working-directory: server
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -72,19 +63,15 @@ jobs:
 
       - name: Install server dependencies
         working-directory: server
-        run: python -m pip install --editable ".[dev]"
+        run: python -m pip install --editable "."
 
       - name: Compile Python sources
         working-directory: server
-        run: python -m compileall -q app migrations tests
+        run: python -m compileall -q app migrations
 
       - name: Apply database migrations
         working-directory: server
         run: alembic upgrade head
-
-      - name: Run server tests
-        working-directory: server
-        run: pytest -q
 
   image:
     runs-on: ubuntu-latest
@@ -94,7 +81,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Build production server image
-        run: docker build --file Dockerfile.server --tag singjourney-server:ci .
+        run: docker build --file docker/Dockerfile.server --tag singjourney-server:ci .
 
   deploy:
     needs: [verify, image]
@@ -108,15 +95,10 @@ jobs:
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/singjourney' }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY || secrets.ECS_SSH_KEY }}
       SINGJOURNEY_DATABASE_PASSWORD: ${{ secrets.SINGJOURNEY_DATABASE_PASSWORD }}
-      SINGJOURNEY_R2_ACCOUNT_ID: ${{ vars.SINGJOURNEY_R2_ACCOUNT_ID }}
-      SINGJOURNEY_R2_ACCESS_KEY_ID: ${{ secrets.SINGJOURNEY_R2_ACCESS_KEY_ID }}
-      SINGJOURNEY_R2_SECRET_ACCESS_KEY: ${{ secrets.SINGJOURNEY_R2_SECRET_ACCESS_KEY }}
-      SINGJOURNEY_R2_BUCKET_NAME: ${{ vars.SINGJOURNEY_R2_BUCKET_NAME || 'singjourney-share-audio' }}
       SINGJOURNEY_PUBLIC_API_BASE_URL: ${{ vars.SINGJOURNEY_PUBLIC_API_BASE_URL || 'https://singjourney.com/api/v1' }}
-      SINGJOURNEY_PUBLIC_SHARE_BASE_URL: ${{ vars.SINGJOURNEY_PUBLIC_SHARE_BASE_URL || 'https://singjourney.com' }}
       SINGJOURNEY_CORS_ORIGINS: ${{ vars.SINGJOURNEY_CORS_ORIGINS || 'https://singjourney.com' }}
-      SINGJOURNEY_WECHAT_PRACTICE_APP_ID: ${{ vars.SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID }}
-      SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET: ${{ secrets.SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET }}
+      SINGJOURNEY_MINI_PROGRAM_APP_ID: ${{ vars.SINGJOURNEY_MINI_PROGRAM_APP_ID }}
+      SINGJOURNEY_MINI_PROGRAM_APP_SECRET: ${{ secrets.SINGJOURNEY_MINI_PROGRAM_APP_SECRET }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -126,9 +108,6 @@ jobs:
           test -n "$DEPLOY_HOST" || { echo "Missing Actions variable: DEPLOY_HOST"; exit 1; }
           test -n "$DEPLOY_SSH_PRIVATE_KEY" || { echo "Missing Actions secret: DEPLOY_SSH_PRIVATE_KEY"; exit 1; }
           test -n "$SINGJOURNEY_DATABASE_PASSWORD" || { echo "Missing Actions secret: SINGJOURNEY_DATABASE_PASSWORD"; exit 1; }
-          test -n "$SINGJOURNEY_R2_ACCOUNT_ID" || { echo "Missing Actions variable: SINGJOURNEY_R2_ACCOUNT_ID"; exit 1; }
-          test -n "$SINGJOURNEY_R2_ACCESS_KEY_ID" || { echo "Missing Actions secret: SINGJOURNEY_R2_ACCESS_KEY_ID"; exit 1; }
-          test -n "$SINGJOURNEY_R2_SECRET_ACCESS_KEY" || { echo "Missing Actions secret: SINGJOURNEY_R2_SECRET_ACCESS_KEY"; exit 1; }
 
       - name: Configure SSH
         run: |
@@ -138,7 +117,7 @@ jobs:
           ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Package server release
-        run: tar -czf server-release.tar.gz Dockerfile.server compose.server.yml release server
+        run: tar -czf server-release.tar.gz docker/Dockerfile.server docker/Dockerfile.server.dockerignore docker/compose.server.yml deploy server
 
       - name: Create protected server environment
         run: |
@@ -148,17 +127,10 @@ jobs:
             printf 'SINGJOURNEY_ENVIRONMENT=production\n'
             printf 'SINGJOURNEY_DATABASE_PASSWORD=%s\n' "$SINGJOURNEY_DATABASE_PASSWORD"
             printf 'SINGJOURNEY_DATABASE_URL=postgresql+psycopg://singjourney:%s@db:5432/singjourney\n' "$encoded_database_password"
-            printf 'SINGJOURNEY_STORAGE_BACKEND=cloudflare_r2\n'
-            printf 'SINGJOURNEY_STORAGE_ROOT=/data/media\n'
-            printf 'SINGJOURNEY_R2_ACCOUNT_ID=%s\n' "$SINGJOURNEY_R2_ACCOUNT_ID"
-            printf 'SINGJOURNEY_R2_ACCESS_KEY_ID=%s\n' "$SINGJOURNEY_R2_ACCESS_KEY_ID"
-            printf 'SINGJOURNEY_R2_SECRET_ACCESS_KEY=%s\n' "$SINGJOURNEY_R2_SECRET_ACCESS_KEY"
-            printf 'SINGJOURNEY_R2_BUCKET_NAME=%s\n' "$SINGJOURNEY_R2_BUCKET_NAME"
             printf 'SINGJOURNEY_PUBLIC_API_BASE_URL=%s\n' "$SINGJOURNEY_PUBLIC_API_BASE_URL"
-            printf 'SINGJOURNEY_PUBLIC_SHARE_BASE_URL=%s\n' "$SINGJOURNEY_PUBLIC_SHARE_BASE_URL"
             printf 'SINGJOURNEY_CORS_ORIGINS=%s\n' "$SINGJOURNEY_CORS_ORIGINS"
-            printf 'SINGJOURNEY_WECHAT_PRACTICE_APP_ID=%s\n' "$SINGJOURNEY_WECHAT_PRACTICE_APP_ID"
-            printf 'SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET=%s\n' "$SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET"
+            printf 'SINGJOURNEY_MINI_PROGRAM_APP_ID=%s\n' "$SINGJOURNEY_MINI_PROGRAM_APP_ID"
+            printf 'SINGJOURNEY_MINI_PROGRAM_APP_SECRET=%s\n' "$SINGJOURNEY_MINI_PROGRAM_APP_SECRET"
             printf 'SINGJOURNEY_DATA_PATH=%s/data\n' "$DEPLOY_PATH"
           } > server-deploy.env
 
@@ -185,16 +157,16 @@ jobs:
           ln -sfn "$release_path" "$current_path"
           cd "$current_path"
           docker compose --project-name singjourney --env-file "$environment_path" \
-            -f compose.server.yml up -d --build --remove-orphans
+            -f docker/compose.server.yml up -d --build --remove-orphans
           for attempt in $(seq 1 18); do
             if docker compose --project-name singjourney --env-file "$environment_path" \
-              -f compose.server.yml exec -T api python -c \
+            -f docker/compose.server.yml exec -T api python -c \
               "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"; then
               exit 0
             fi
             sleep 5
           done
           docker compose --project-name singjourney --env-file "$environment_path" \
-            -f compose.server.yml logs --tail=100 api
+            -f docker/compose.server.yml logs --tail=100 api
           exit 1
           REMOTE

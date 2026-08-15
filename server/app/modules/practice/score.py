@@ -48,21 +48,10 @@ class PracticeScore:
         }
 
 
-def build_octave_connection_score(voice: str) -> PracticeScore:
-    """Build the fixed male C3-C5 or female F3-F5 octave-connection score.
+def build_octave_connection_master_score() -> PracticeScore:
+    """Build one authoritative C3-F5 score shared by every voice preset."""
 
-    The first pitch of each phrase rises chromatically. The final phrase starts
-    one octave below the configured upper boundary, so the entire fixed range is
-    covered without allowing an unsafe client-side transposition.
-    """
-
-    if voice not in VOICE_PLAYBACK_RANGES:
-        raise ValueError(f"Unsupported voice preset: {voice}")
-
-    range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
-    master_start, master_end = MASTER_PIANO_RANGE
-    if range_start < master_start or range_end > master_end:
-        raise ValueError("Voice playback range exceeds the C3-F5 master piano range")
+    range_start, range_end = MASTER_PIANO_RANGE
     seconds_per_beat = 60 / OCTAVE_CONNECTION_TEMPO_BPM
     cursor_beats = float(OCTAVE_CONNECTION_COUNT_IN_BEATS)
     events: list[TargetNoteEvent] = []
@@ -81,10 +70,57 @@ def build_octave_connection_score(voice: str) -> PracticeScore:
     return PracticeScore(
         exercise_key=OCTAVE_CONNECTION_EXERCISE_KEY,
         version=OCTAVE_CONNECTION_VERSION,
-        voice=voice,
+        voice="master",
         tempo_bpm=OCTAVE_CONNECTION_TEMPO_BPM,
         range_start_midi=range_start,
         range_end_midi=range_end,
         duration=round(cursor_beats * seconds_per_beat, 6),
         target_notes=tuple(events),
     )
+
+
+def build_octave_connection_manifest(voice: str, audio_path: str) -> dict[str, object]:
+    """Slice one voice preset from the shared master score without duplicating audio."""
+
+    if voice not in VOICE_PLAYBACK_RANGES:
+        raise ValueError(f"Unsupported voice preset: {voice}")
+    score = build_octave_connection_master_score()
+    range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
+    phrase_size = len(OCTAVE_CONNECTION_PATTERN)
+    phrases = [
+        score.target_notes[index:index + phrase_size]
+        for index in range(0, len(score.target_notes), phrase_size)
+    ]
+    selected = [
+        phrase
+        for phrase in phrases
+        if phrase and min(note.midi for note in phrase) >= range_start
+        and max(note.midi for note in phrase) <= range_end
+    ]
+    if not selected:
+        raise ValueError(f"Voice preset has no playable phrases: {voice}")
+
+    first_event = selected[0][0]
+    last_event = selected[-1][-1]
+    segment_start = 0.0 if first_event is score.target_notes[0] else first_event.start
+    phrase_rest_seconds = OCTAVE_CONNECTION_PHRASE_REST_BEATS * 60 / score.tempo_bpm
+    segment_end = min(score.duration, last_event.end + phrase_rest_seconds)
+    notes = [note for phrase in selected for note in phrase]
+    return {
+        "exercise_key": score.exercise_key,
+        "version": score.version,
+        "voice": voice,
+        "tempo_bpm": score.tempo_bpm,
+        "range": {"minimum_midi": range_start, "maximum_midi": range_end},
+        "duration": round(segment_end - segment_start, 6),
+        "audio_path": audio_path,
+        "audio_offset": round(segment_start, 6),
+        "target_notes": [
+            {
+                "start": round(note.start - segment_start, 6),
+                "end": round(note.end - segment_start, 6),
+                "midi": note.midi,
+            }
+            for note in notes
+        ],
+    }

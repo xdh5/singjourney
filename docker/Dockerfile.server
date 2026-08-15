@@ -1,0 +1,54 @@
+ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.12-slim
+FROM ${PYTHON_IMAGE} AS practice-assets
+
+ARG GENERALUSER_COMMIT=684543d5e5efaef08d02be50dcda8d552478fa60
+
+WORKDIR /workspace
+
+RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g; s|http://deb.debian.org/debian-security|https://mirrors.aliyun.com/debian-security|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates curl ffmpeg fluidsynth \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN --mount=type=cache,target=/root/.cache/pip pip install mido==1.3.3
+
+RUN curl --fail --location --retry 3 \
+      "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/${GENERALUSER_COMMIT}/GeneralUser-GS.sf2" \
+      --output /opt/GeneralUser-GS.sf2 \
+    && curl --fail --location --retry 3 \
+      "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/${GENERALUSER_COMMIT}/documentation/LICENSE.txt" \
+      --output /opt/GeneralUser-GS-LICENSE.txt
+
+COPY server/app /workspace/app
+RUN PYTHONPATH=/workspace python -m app.jobs.render_practice_assets \
+      --output /practice-assets \
+      --soundfont /opt/GeneralUser-GS.sf2
+
+FROM ${PYTHON_IMAGE} AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN groupadd --gid 10001 singjourney \
+    && useradd --uid 10001 --gid singjourney --no-create-home singjourney \
+    && mkdir -p /data/media \
+    && chown -R singjourney:singjourney /data
+
+COPY server/requirements.txt ./requirements.txt
+COPY server/pyproject.toml ./pyproject.toml
+
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+
+COPY server/app ./app
+COPY server/migrations ./migrations
+COPY server/alembic.ini ./alembic.ini
+COPY --from=practice-assets /practice-assets ./practice-assets
+
+USER singjourney
+
+EXPOSE 8000
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -1,1 +1,1 @@
-"""Unified account identities and WeChat practice-mini-program authentication."""
+"""Unified account identities and WeChat mini-program authentication."""

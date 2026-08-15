@@ -1,0 +1,68 @@
+name: singjourney
+
+services:
+  client-lint:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: quality
+
+  client-format:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: quality
+    command: npm run format -w @singjourney/client
+    volumes:
+      - ../client:/workspace/client
+
+  client-build:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      args:
+        MINI_PROGRAM_APP_ID: ${SINGJOURNEY_MINI_PROGRAM_APP_ID:-touristappid}
+    volumes:
+      - ../client/dist:/output
+
+  client-build-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: web-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:web
+    volumes:
+      - ../client/dist/h5:/output
+
+  client-build-wx:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: wx-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:wx
+        MINI_PROGRAM_APP_ID: ${SINGJOURNEY_MINI_PROGRAM_APP_ID:-touristappid}
+        API_BASE_URL: ${SINGJOURNEY_CLIENT_API_BASE_URL:-http://127.0.0.1:8000/api/v1}
+    volumes:
+      - ../client/dist/mp-weixin:/output
+
+  client-build-ios:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: ios-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:ios
+    volumes:
+      - ../client/dist/ios:/output
+
+  client-build-android:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: android-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:android
+    volumes:
+      - ../client/dist/android:/output

@@ -13,8 +13,6 @@ _lock = Lock()
 
 
 def accept_telemetry_request(client_key: str) -> bool:
-    """Bound public ingestion cost using a small in-process per-client window."""
-
     now = monotonic()
     cutoff = now - TELEMETRY_RATE_LIMIT_WINDOW_SECONDS
     with _lock:

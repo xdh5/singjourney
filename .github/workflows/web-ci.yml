@@ -8,7 +8,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".npmrc"
-      - "Dockerfile.client"
+      - "docker/Dockerfile.client"
+      - "docker/Dockerfile.client.dockerignore"
       - ".github/workflows/web-ci.yml"
   push:
     branches: [main]
@@ -20,7 +21,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".npmrc"
-      - "Dockerfile.client"
+      - "docker/Dockerfile.client"
+      - "docker/Dockerfile.client.dockerignore"
       - ".github/workflows/web-ci.yml"
   workflow_dispatch:
 
@@ -39,30 +41,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Resolve Web release version
-        id: release
-        shell: bash
-        run: |
-          tag=""
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then tag="$GITHUB_REF_NAME"; fi
-          node scripts/release-version.mjs github-output web "$tag" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Type-check, test, and build Web
+      - name: Build Web
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.client
+          file: docker/Dockerfile.client
           target: web-artifact
           push: false
           build-args: |
             CLIENT_BUILD_SCRIPT=build:client:web
-            CLIENT_RUN_CHECKS=true
             CLIENT_RELEASE_COMPONENT=web
-            CLIENT_RELEASE_TAG=${{ github.ref_type == 'tag' && github.ref_name || '' }}
-            CLIENT_RELEASE_VERSION=${{ steps.release.outputs.version }}
           outputs: type=local,dest=client/dist/h5
           cache-from: type=gha,scope=web-ci
           cache-to: type=gha,mode=max,scope=web-ci

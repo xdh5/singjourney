@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": true,
+  "skip-changelog": true,
+  "plugins": [
+    {
+      "type": "node-workspace",
+      "merge": false
+    }
+  ],
+  "packages": {
+    "client": {
+      "release-type": "node",
+      "component": "client-core",
+      "include-component-in-tag": true,
+      "skip-github-release": true
+    },
+    "client/targets/web": {
+      "release-type": "node",
+      "component": "web",
+      "include-component-in-tag": true
+    },
+    "client/targets/app": {
+      "release-type": "node",
+      "component": "app",
+      "include-component-in-tag": true
+    },
+    "client/targets/wx": {
+      "release-type": "node",
+      "component": "wx",
+      "include-component-in-tag": true
+    },
+    "server": {
+      "release-type": "python",
+      "component": "server",
+      "include-component-in-tag": true
+    }
+  }
+}

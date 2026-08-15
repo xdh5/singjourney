@@ -11,7 +11,13 @@ class WeChatLoginRequest(BaseModel):
 class AuthUser(BaseModel):
     id: str
     display_name: str | None
+    avatar_data_url: str | None
     locale: str | None
+
+
+class ProfileUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    avatar_data_url: str | None = Field(default=None, max_length=750_000)
 
 
 class AuthSessionResponse(BaseModel):

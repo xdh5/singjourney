@@ -1,2 +1,0 @@
-"""Expiring recording share links."""
-

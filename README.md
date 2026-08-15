@@ -1,70 +1,100 @@
-# 声刻度
+# 声刻度项目
 
-声刻度（SingJourney）是一套共享页面代码的 Web、微信小程序、iOS、Android 和 HarmonyOS 练声客户端，并配有独立 Python 服务端。
+这是声刻度的统一代码仓库。Web、App 和微信小程序共享客户端页面与组件，业务接口封装在 `services` 中，运行端差异和通用能力封装在 `utils` 中；服务端提供练声统计、登录、埋点和数据接口。
 
-## 项目结构
+## 目录结构
 
 ```text
-client/                 uni-app 多端客户端
-packages/pitch-core/    实时音高检测与滤波
-packages/curve-layout/  音高曲线布局
-packages/contracts/     客户端共享数据结构
-server/                 FastAPI、PostgreSQL 与音频存储层
+singjourney/
+├─ .github/              GitHub Actions 工作流
+├─ client/               Web、App、微信小程序统一客户端
+│  ├─ scripts/           客户端构建脚本
+│  ├─ src/
+│  │  ├─ assets/         由代码引用并参与打包的资源
+│  │  ├─ components/     多个页面复用的 UI 组件
+│  │  ├─ config/         客户端运行配置
+│  │  ├─ i18n/           国际化初始化
+│  │  ├─ locale/         中英文文案
+│  │  ├─ pages/          按页面分目录；页面私有组件放在各自 components 中
+│  │  ├─ services/       按业务域组织的后端接口调用
+│  │  ├─ stores/         Pinia 全局业务状态
+│  │  ├─ static/         原样复制到产物的静态资源
+│  │  ├─ styles/         跨端基础样式与通用工具类
+│  │  ├─ utils/          无业务页面含义的通用能力和跨端适配
+│  │  │  ├─ audio/       音频文件、播放、录制、编码和 WAV 转换
+│  │  │  ├─ http/        统一 HTTP 请求、接口地址、鉴权和登录
+│  │  │  ├─ pitch/       音高画布、绘制和 Worker
+│  │  │  ├─ recording/   录音存储、列表、播放状态和工具栏规则
+│  │  │  └─ practice/    练声播放与数据类型等本地能力
+│  │  └─ workers/        音高分析 Worker 源码
+│  └─ targets/           Web、App、微信的独立发版版本
+├─ deploy/               服务端部署辅助配置
+├─ docker/               Dockerfile、Compose 和构建忽略规则
+├─ packages/             客户端共用的音高算法、曲线计算和数据类型
+├─ release/              Release Please 配置和版本清单
+├─ server/               Python API、数据库迁移和后台任务
+├─ AGENTS.md              Codex 项目执行规则
+├─ package.json           npm workspace 与统一构建命令
+└─ package-lock.json      npm 依赖锁文件
 ```
 
-## 客户端 Docker 构建
+客户端样式使用 `uni.scss` 管理主题变量，使用 `uni-scss` 管理通用工具类，并按需使用 `uni-ui` 组件。跨页面共享的状态使用 Pinia；录音帧、音高画布和播放器等高频瞬时状态保留在对应页面或能力模块中。
 
-发布客户端前，先由服务端乐谱代码生成版本化的单音钢琴和正确曲线资产：
+## 代码规范
 
-```bash
-docker compose -f compose.client.yml run --rm --build practice-assets
+客户端使用 ESLint 检查 Vue 和 TypeScript，使用 Prettier 统一 Vue、TypeScript、SCSS、JSON 和构建脚本格式。
+
+```powershell
+docker compose -f docker/compose.client.yml run --build --rm client-lint
+docker compose -f docker/compose.client.yml run --build --rm client-format
 ```
 
-生成产物写入 `client/src/static/practice`，普通用户点击练习时只读取缓存资产，不会在线重新合成。
+npm 与 Docker 客户端构建统一使用 `https://registry.npmmirror.com`。
 
-```bash
-docker compose -f compose.client.yml run --rm --build client-build
+## Docker 构建
+
+在项目根目录执行。
+
+日常构建微信小程序：
+
+```powershell
+docker compose -f docker/compose.client.yml run --build --rm client-build-wx
 ```
 
-日常开发可只构建受影响的平台，例如音调仪微信小程序：
+产物写入 `client/dist/mp-weixin`，微信开发者工具保持打开该目录即可。该命令不构建 Web、iOS 或 Android。
 
-```bash
-docker compose -f compose.client.yml run --rm --build client-build-wx-pitch
+构建 Web、App 和微信小程序：
+
+```powershell
+docker compose -f docker/compose.client.yml run --build --rm client-build
 ```
 
-其他单端服务名为 `client-build-web`、`client-build-wx-practice`、`client-build-ios` 和 `client-build-android`；全量 `client-build` 留给共享核心改动和发布前验证。
+构建服务端镜像：
 
-产物位于：
-
-- `client/dist/h5`
-- `client/dist/mp-weixin/pitch-meter`
-- `client/dist/mp-weixin/vocal-practice`
-- `client/dist/ios`
-- `client/dist/android`
-- `client/dist/harmony`（HBuilderX/DevEco 完成 HarmonyOS 构建后规范化生成）
-
-微信开发者工具分别导入 `client/dist/mp-weixin/pitch-meter` 和 `client/dist/mp-weixin/vocal-practice`。构建时通过 `SINGJOURNEY_PITCH_MINI_PROGRAM_APP_ID` 与 `SINGJOURNEY_PRACTICE_MINI_PROGRAM_APP_ID` 配置两个独立 AppID。
-
-## 服务端 Docker 启动
-
-```bash
-docker compose -f compose.server.yml up --build
+```powershell
+docker compose -f docker/compose.server.yml build api
 ```
 
-当前服务端开放临时录音分享、练声小程序微信登录和真实练声统计；微信登录还需配置 `SINGJOURNEY_WECHAT_PRACTICE_APP_ID` 与 `SINGJOURNEY_WECHAT_PRACTICE_APP_SECRET`。练习自然完成后会按登录用户记录次数与有效时长，统计接口不上传录音或曲线。云端录音同步、在线伴奏和 AI 测评尚未提供接口。参见 [server/README.md](server/README.md)。
+重新生成练声音频资源：
 
-## 独立版本与发布
+```powershell
+docker compose -f docker/compose.client.yml run --build --rm practice-assets
+```
 
-所有可发布组件的当前版本统一记录在 `release/versions.json`，但各组件独立升级：
+## 版本管理
 
-- Web：`web-v0.1.0`
-- 音调仪微信小程序：`wx-pitch-v0.1.0`
-- 练声微信小程序：`wx-practice-v0.1.0`
-- iOS：`ios-v0.1.0`
-- Android：`android-v0.1.0`
-- HarmonyOS：`harmony-v0.1.0`
-- Server API：`server-v0.1.0`
+Release Please 管理四个独立发布版本：
 
-发布前先只修改目标组件的版本号及必要的最低兼容版本，再创建与其完全一致的 Git Tag。GitHub Actions 会拒绝 Tag 与版本清单不一致的构建。Web 和 Server Tag 分别触发部署；微信、iOS 和 Android Tag 生成各自的构建产物。HarmonyOS 使用独立版本号，但最终工程和安装包需要 HBuilderX 调用 DevEco Studio 工具链生成。各原生端共享页面和业务代码，但安装包、版本号和发布节奏相互独立。
+- Web：`web-v*`
+- App：`app-v*`
+- 微信小程序：`wx-v*`
+- 服务端：`server-v*`
 
-后端接口大版本使用 `/api/v1` 这样的路径管理。新增兼容字段可以继续使用当前大版本；删除字段或改变既有语义时应增加 API 大版本，并为仍在使用的旧客户端保留旧接口。
+版本配置位于 `release/`，各客户端发布版本位于 `client/targets/`。日常提交使用 Conventional Commits，例如：
+
+```text
+fix: 修复录音播放问题
+feat: 增加练声统计功能
+```
+
+Release Please 会自动创建发版 PR；合并发版 PR 后创建对应 Tag 和 GitHub Release。微信小程序仍通过微信发布工具上传和审核，不通过 GitHub 发布。

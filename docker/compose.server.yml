@@ -1,0 +1,62 @@
+name: singjourney
+
+x-server-environment: &server-environment
+  SINGJOURNEY_DATABASE_URL: ${SINGJOURNEY_DATABASE_URL:-postgresql+psycopg://singjourney:singjourney-local-only@db:5432/singjourney}
+  SINGJOURNEY_PUBLIC_API_BASE_URL: ${SINGJOURNEY_PUBLIC_API_BASE_URL:-https://singjourney.com/api/v1}
+  SINGJOURNEY_CORS_ORIGINS: ${SINGJOURNEY_CORS_ORIGINS:-https://singjourney.com,http://localhost:5173,http://localhost:3000}
+  SINGJOURNEY_MINI_PROGRAM_APP_ID: ${SINGJOURNEY_MINI_PROGRAM_APP_ID:-}
+  SINGJOURNEY_MINI_PROGRAM_APP_SECRET: ${SINGJOURNEY_MINI_PROGRAM_APP_SECRET:-}
+  SINGJOURNEY_AUTH_SESSION_DAYS: ${SINGJOURNEY_AUTH_SESSION_DAYS:-30}
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: singjourney
+      POSTGRES_USER: singjourney
+      POSTGRES_PASSWORD: ${SINGJOURNEY_DATABASE_PASSWORD:-singjourney-local-only}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U singjourney -d singjourney"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - singjourney-db:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    environment: *server-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${SINGJOURNEY_DATA_PATH:-../server/data}:/data
+
+  alloy:
+    image: grafana/alloy:v1.18.0
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL:-}
+      GRAFANA_LOKI_USERNAME: ${GRAFANA_LOKI_USERNAME:-}
+      GRAFANA_LOKI_TOKEN: ${GRAFANA_LOKI_TOKEN:-}
+    restart: unless-stopped
+    volumes:
+      - ../deploy/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - singjourney-alloy:/var/lib/alloy/data
+
+volumes:
+  singjourney-db:
+  singjourney-alloy:

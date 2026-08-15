@@ -1,3 +1,5 @@
+@import '@dcloudio/uni-ui/lib/uni-scss/variables.scss';
+
 $singjourney-green: #356b5b;
 $singjourney-green-dark: #0f4d3b;
 $singjourney-green-card: #17634b;
@@ -6,3 +8,16 @@ $singjourney-text-secondary: #416b5d;
 $singjourney-text-muted: #6c7773;
 $singjourney-surface: #edf5f1;
 $singjourney-border: #c9ddd5;
+
+$uni-primary: $singjourney-green;
+$uni-primary-disable: mix(#fff, $uni-primary, 50%);
+$uni-primary-light: mix(#fff, $uni-primary, 80%);
+$uni-main-color: $singjourney-text-primary;
+$uni-base-color: $singjourney-text-secondary;
+$uni-secondary-color: $singjourney-text-muted;
+$uni-border-color: $singjourney-border;
+$uni-bg-color: #fff;
+$uni-bg-color-grey: #f7faf8;
+$uni-bg-color-hover: #edf5f1;
+$uni-border-radius-base: 16rpx;
+$uni-border-radius-lg: 24rpx;

@@ -7,22 +7,26 @@ from app.modules.accounts.schemas import (
     AuthSessionResponse,
     AuthUser,
     CurrentSessionResponse,
+    ProfileUpdateRequest,
     WeChatLoginRequest,
 )
+from app.modules.accounts.dependencies import require_current_user
+from app.modules.accounts.models import User
 from app.modules.accounts.service import (
     WeChatAuthenticationError,
     WeChatConfigurationError,
     find_session,
     login_with_wechat_code,
+    update_profile,
 )
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post(
-    "/wechat/practice/login",
+    "/wechat/login",
     response_model=AuthSessionResponse,
-    summary="Log in to the vocal-practice mini program with WeChat",
+    summary="Log in to the mini program with WeChat",
     description=(
         "Accepts the one-time code returned by wx.login, exchanges it with WeChat on the server, "
         "creates or resolves the unified SingJourney user, and returns an opaque application session. "
@@ -32,10 +36,10 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
         200: {"description": "The WeChat identity is authenticated and an application session is issued."},
         401: {"description": "WeChat rejected the code or the identity could not be resolved."},
         422: {"description": "The request code or locale is invalid."},
-        503: {"description": "The server has no practice-mini-program AppID/AppSecret configuration."},
+        503: {"description": "The server has no mini-program AppID/AppSecret configuration."},
     },
 )
-def post_wechat_practice_login(
+def post_wechat_login(
     request: WeChatLoginRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -52,6 +56,7 @@ def post_wechat_practice_login(
         user=AuthUser(
             id=issued.user.id,
             display_name=issued.user.display_name,
+            avatar_data_url=issued.user.avatar_data_url,
             locale=issued.user.locale,
         ),
     )
@@ -81,7 +86,27 @@ def get_current_session(
     session, user = result
     return CurrentSessionResponse(
         expires_at=session.expires_at,
-        user=AuthUser(id=user.id, display_name=user.display_name, locale=user.locale),
+        user=AuthUser(
+            id=user.id,
+            display_name=user.display_name,
+            avatar_data_url=user.avatar_data_url,
+            locale=user.locale,
+        ),
+    )
+
+
+@router.patch("/profile", response_model=AuthUser, summary="Update the current user profile")
+def patch_profile(
+    request: ProfileUpdateRequest,
+    user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> AuthUser:
+    updated = update_profile(db, user, request.display_name, request.avatar_data_url)
+    return AuthUser(
+        id=updated.id,
+        display_name=updated.display_name,
+        avatar_data_url=updated.avatar_data_url,
+        locale=updated.locale,
     )
 
 

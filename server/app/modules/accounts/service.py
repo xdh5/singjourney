@@ -15,7 +15,7 @@ from app.modules.accounts.constants import (
     AUTH_TOKEN_BYTES,
     WECHAT_CODE_EXCHANGE_URL,
     WECHAT_GRANT_TYPE,
-    WECHAT_PRACTICE_PROVIDER,
+    WECHAT_PROVIDER,
     WECHAT_REQUEST_TIMEOUT_SECONDS,
 )
 from app.modules.accounts.models import AuthIdentity, AuthSession, User
@@ -26,7 +26,7 @@ class WeChatAuthenticationError(RuntimeError):
 
 
 class WeChatConfigurationError(RuntimeError):
-    """The practice mini program credentials are absent on the server."""
+    """The mini program credentials are absent on the server."""
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ def login_with_wechat_code(
     openid = _exchange_code(settings, code)
     identity = db.scalar(
         select(AuthIdentity).where(
-            AuthIdentity.provider == WECHAT_PRACTICE_PROVIDER,
+            AuthIdentity.provider == WECHAT_PROVIDER,
             AuthIdentity.provider_subject == openid,
         )
     )
@@ -63,7 +63,7 @@ def login_with_wechat_code(
         db.add(
             AuthIdentity(
                 user_id=user.id,
-                provider=WECHAT_PRACTICE_PROVIDER,
+                provider=WECHAT_PROVIDER,
                 provider_subject=openid,
                 verified_at=datetime.now(timezone.utc),
             )
@@ -99,13 +99,28 @@ def find_session(db: Session, access_token: str) -> tuple[AuthSession, User] | N
     return session, user
 
 
+def update_profile(
+    db: Session,
+    user: User,
+    display_name: str | None,
+    avatar_data_url: str | None,
+) -> User:
+    if display_name is not None:
+        user.display_name = display_name.strip()
+    if avatar_data_url is not None:
+        user.avatar_data_url = avatar_data_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def _exchange_code(settings: Settings, code: str) -> str:
-    if not settings.wechat_practice_app_id or not settings.wechat_practice_app_secret:
-        raise WeChatConfigurationError("WeChat practice login is not configured")
+    if not settings.mini_program_app_id or not settings.mini_program_app_secret:
+        raise WeChatConfigurationError("WeChat login is not configured")
     query = urlencode(
         {
-            "appid": settings.wechat_practice_app_id,
-            "secret": settings.wechat_practice_app_secret,
+            "appid": settings.mini_program_app_id,
+            "secret": settings.mini_program_app_secret,
             "js_code": code,
             "grant_type": WECHAT_GRANT_TYPE,
         }

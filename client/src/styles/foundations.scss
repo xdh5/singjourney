@@ -1,0 +1,55 @@
+.sj-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: $uni-bg-color-grey;
+}
+
+.sj-card {
+  border: 1px solid $uni-border-color;
+  border-radius: $uni-border-radius-lg;
+  box-sizing: border-box;
+  background: $uni-bg-color;
+}
+
+.sj-row {
+  display: flex;
+  align-items: center;
+}
+
+.sj-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.sj-grow {
+  min-width: 0;
+  flex: 1;
+}
+
+.sj-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999rpx;
+  box-sizing: border-box;
+  font-weight: 800;
+}
+
+.sj-button-primary {
+  color: #fff;
+  background: $uni-primary;
+}
+
+.sj-button-outline {
+  border: 1px solid $uni-primary;
+  color: $uni-primary;
+  background: #fff;
+}
+
+.sj-muted {
+  color: $uni-secondary-color;
+}
+
+.sj-tabular {
+  font-variant-numeric: tabular-nums;
+}

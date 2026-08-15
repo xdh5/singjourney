@@ -1,0 +1,5 @@
+dist
+.generated-mini-program
+src/static/workers
+src/static/practice
+package-lock.json

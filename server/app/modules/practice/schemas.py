@@ -44,6 +44,7 @@ class PracticeActivityDay(BaseModel):
 
 class PracticeExerciseSummary(BaseModel):
     exercise_key: str
+    title: str
     sessions: int
     duration_seconds: float
 
@@ -58,3 +59,60 @@ class PracticeStatisticsResponse(BaseModel):
     total: PracticePeriodSummary
     activity: list[PracticeActivityDay]
     today_exercises: list[PracticeExerciseSummary]
+
+
+class PracticeCategoryResponse(BaseModel):
+    key: str
+    name: str
+
+
+class PracticeExerciseResponse(BaseModel):
+    id: str
+    title: str
+    tip: str
+    category_keys: list[str]
+    category_names: list[str]
+    pattern: str
+    recommended_syllables: str
+    tempo: int
+    repetitions: int
+    intensity: str
+    enabled: bool
+
+
+class PracticeCatalogResponse(BaseModel):
+    categories: list[PracticeCategoryResponse]
+    exercises: list[PracticeExerciseResponse]
+
+
+class PracticeTargetNoteResponse(BaseModel):
+    start: float
+    end: float
+    midi: int
+
+
+class PracticeRangeResponse(BaseModel):
+    minimum_midi: int
+    maximum_midi: int
+
+
+class PracticeManifestResponse(BaseModel):
+    exercise_key: str
+    version: int
+    voice: str
+    tempo_bpm: int
+    range: PracticeRangeResponse
+    duration: float
+    audio_path: str
+    audio_offset: float
+    target_notes: list[PracticeTargetNoteResponse]
+
+
+class PracticeFavoritesResponse(BaseModel):
+    exercise_ids: list[str]
+
+
+class DailyPracticeMessageResponse(BaseModel):
+    id: int
+    date: date
+    content: str

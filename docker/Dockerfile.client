@@ -1,0 +1,88 @@
+FROM node:22-bookworm-slim AS dependencies
+
+WORKDIR /workspace
+
+COPY package.json package-lock.json .npmrc ./
+COPY client/package.json client/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/curve-layout/package.json packages/curve-layout/package.json
+COPY packages/pitch-core/package.json packages/pitch-core/package.json
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci \
+      --registry=https://registry.npmmirror.com \
+      --replace-registry-host=always \
+      --maxsockets=3 \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=2000 \
+      --fetch-retry-maxtimeout=30000
+
+FROM dependencies AS source
+
+COPY client client
+COPY packages packages
+
+# DCloud 的微信编译器要求 easycom 组件位于客户端自己的 node_modules，
+# 否则 npm workspace 提升依赖后会生成非法的 ../node-modules 输出路径。
+RUN mkdir -p client/node_modules/@dcloudio \
+    && cp -a node_modules/@dcloudio/uni-ui client/node_modules/@dcloudio/uni-ui
+
+FROM source AS quality
+
+CMD ["npm", "run", "lint", "-w", "@singjourney/client"]
+
+FROM source AS build
+
+ARG CLIENT_BUILD_SCRIPT=build:client
+ARG CLIENT_RELEASE_COMPONENT=
+ARG MINI_PROGRAM_APP_ID=touristappid
+ARG API_BASE_URL=https://singjourney.com/api/v1
+ENV VITE_RELEASE_COMPONENT=${CLIENT_RELEASE_COMPONENT} \
+    VITE_API_BASE_URL=${API_BASE_URL} \
+    SINGJOURNEY_MINI_PROGRAM_APP_ID=${MINI_PROGRAM_APP_ID}
+RUN npm run "$CLIENT_BUILD_SCRIPT"
+
+FROM scratch AS web-artifact
+
+COPY --from=build /workspace/client/dist/build/h5 /
+
+FROM scratch AS wx-artifact
+
+COPY --from=build /workspace/client/dist/build/mp-weixin /
+
+FROM scratch AS ios-artifact
+
+COPY --from=build /workspace/client/dist/build/ios /
+
+FROM scratch AS android-artifact
+
+COPY --from=build /workspace/client/dist/build/android /
+
+FROM alpine:3.21 AS web-output
+
+COPY --from=build /workspace/client/dist/build/h5 /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS wx-output
+
+COPY --from=build /workspace/client/dist/build/mp-weixin /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS ios-output
+
+COPY --from=build /workspace/client/dist/build/ios /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS android-output
+
+COPY --from=build /workspace/client/dist/build/android /artifact
+CMD ["sh", "-c", "find /output -mindepth 1 -depth -delete && cp -Rf /artifact/. /output/"]
+
+FROM alpine:3.21 AS artifact
+
+COPY --from=build /workspace/client/dist/build/h5 /artifact/h5
+COPY --from=build /workspace/client/dist/build/mp-weixin /artifact/mp-weixin
+COPY --from=build /workspace/client/dist/build/ios /artifact/ios
+COPY --from=build /workspace/client/dist/build/android /artifact/android
+
+CMD ["sh", "-c", "for target in h5 mp-weixin ios android; do mkdir -p /output/$target && find /output/$target -mindepth 1 -depth -delete && cp -Rf /artifact/$target/. /output/$target/ || exit 1; done"]

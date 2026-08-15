@@ -1,4 +1,4 @@
-WECHAT_PRACTICE_PROVIDER = "wechat_practice"
+WECHAT_PROVIDER = "wechat"
 WECHAT_CODE_EXCHANGE_URL = "https://api.weixin.qq.com/sns/jscode2session"
 WECHAT_GRANT_TYPE = "authorization_code"
 AUTH_TOKEN_BYTES = 48

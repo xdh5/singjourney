@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
+from hashlib import sha256
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,7 +10,14 @@ from app.modules.practice.constants import (
     PRACTICE_ACTIVITY_WEEKS,
     PRACTICE_MODE_GUIDED,
 )
-from app.modules.practice.models import PracticeSession
+from app.modules.practice.models import (
+    DailyPracticeMessage,
+    PracticeCategory,
+    PracticeExercise,
+    PracticeExerciseCategory,
+    PracticeFavorite,
+    PracticeSession,
+)
 from app.modules.practice.schemas import (
     PracticeActivityDay,
     PracticeExerciseSummary,
@@ -17,6 +25,97 @@ from app.modules.practice.schemas import (
     PracticeSessionCreateRequest,
     PracticeStatisticsResponse,
 )
+
+
+def read_practice_catalog(db: Session, locale: str):
+    """Return the active exercise catalog, localized from database fields."""
+    use_english = locale.lower().startswith("en")
+    categories = db.scalars(
+        select(PracticeCategory)
+        .where(PracticeCategory.active.is_(True))
+        .order_by(PracticeCategory.sort_order, PracticeCategory.key)
+    ).all()
+    exercises = db.scalars(
+        select(PracticeExercise).order_by(PracticeExercise.sort_order, PracticeExercise.id)
+    ).all()
+    category_rows = db.execute(
+        select(PracticeExerciseCategory.exercise_id, PracticeCategory)
+        .join(PracticeCategory, PracticeCategory.key == PracticeExerciseCategory.category_key)
+        .where(PracticeCategory.active.is_(True))
+        .order_by(
+            PracticeExerciseCategory.exercise_id,
+            PracticeExerciseCategory.sort_order,
+            PracticeCategory.sort_order,
+        )
+    ).all()
+    exercise_categories: dict[str, list[PracticeCategory]] = defaultdict(list)
+    for exercise_id, category in category_rows:
+        exercise_categories[exercise_id].append(category)
+    return {
+        "categories": [
+            {"key": category.key, "name": category.name_en if use_english else category.name_zh_hans}
+            for category in categories
+        ],
+        "exercises": [
+            {
+                "id": exercise.id,
+                "title": exercise.title_en if use_english else exercise.title_zh_hans,
+                "tip": exercise.tip_en if use_english else exercise.tip_zh_hans,
+                "category_keys": [category.key for category in exercise_categories[exercise.id]],
+                "category_names": [
+                    category.name_en if use_english else category.name_zh_hans
+                    for category in exercise_categories[exercise.id]
+                ],
+                "pattern": exercise.pattern,
+                "recommended_syllables": exercise.recommended_syllables,
+                "tempo": exercise.tempo,
+                "repetitions": exercise.repetitions,
+                "intensity": exercise.intensity,
+                "enabled": exercise.enabled,
+            }
+            for exercise in exercises
+            if exercise_categories[exercise.id]
+        ],
+    }
+
+
+def read_daily_practice_message(db: Session, local_date: date, locale: str):
+    """Map a calendar date deterministically to one of the 30 stored messages."""
+    message_id = int.from_bytes(sha256(local_date.isoformat().encode()).digest()[:8], "big") % 30 + 1
+    message = db.get(DailyPracticeMessage, message_id)
+    if message is None or not message.active:
+        return None
+    return {
+        "id": message.id,
+        "date": local_date,
+        "content": message.content_en if locale.lower().startswith("en") else message.content_zh_hans,
+    }
+
+
+def read_practice_favorites(db: Session, user_id: str) -> list[str]:
+    return list(
+        db.scalars(
+            select(PracticeFavorite.exercise_id)
+            .where(PracticeFavorite.user_id == user_id)
+            .order_by(PracticeFavorite.created_at, PracticeFavorite.exercise_id)
+        ).all()
+    )
+
+
+def add_practice_favorite(db: Session, user_id: str, exercise_id: str) -> bool:
+    if db.get(PracticeExercise, exercise_id) is None:
+        return False
+    if db.get(PracticeFavorite, (user_id, exercise_id)) is None:
+        db.add(PracticeFavorite(user_id=user_id, exercise_id=exercise_id))
+        db.commit()
+    return True
+
+
+def remove_practice_favorite(db: Session, user_id: str, exercise_id: str) -> None:
+    favorite = db.get(PracticeFavorite, (user_id, exercise_id))
+    if favorite is not None:
+        db.delete(favorite)
+        db.commit()
 
 
 def record_completed_practice(
@@ -52,6 +151,7 @@ def read_practice_statistics(
     db: Session,
     user_id: str,
     timezone_offset_minutes: int,
+    locale: str = "zh-Hans",
     now: datetime | None = None,
 ) -> PracticeStatisticsResponse:
     """Aggregate all-time, local-day, per-exercise, and 20-week activity for one user."""
@@ -104,9 +204,18 @@ def read_practice_statistics(
             )
         )
 
+    use_english = locale.lower().startswith("en")
+    exercise_records = db.scalars(
+        select(PracticeExercise).where(PracticeExercise.id.in_(today_exercises.keys()))
+    ).all()
+    exercise_titles = {
+        exercise.id: exercise.title_en if use_english else exercise.title_zh_hans
+        for exercise in exercise_records
+    }
     exercises = [
         PracticeExerciseSummary(
             exercise_key=exercise_key,
+            title=exercise_titles.get(exercise_key, exercise_key),
             sessions=int(values[0]),
             duration_seconds=round(values[1], 3),
         )

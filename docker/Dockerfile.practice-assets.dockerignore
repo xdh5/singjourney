@@ -1,0 +1,11 @@
+.git
+.nuxt
+.output
+**/dist
+**/node_modules
+.pnpm-store
+npm-debug.log
+.env
+.env.*
+*.db
+data

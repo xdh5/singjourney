@@ -6,8 +6,7 @@ class TelemetryPlatform(StrEnum):
     IOS = "ios"
     ANDROID = "android"
     HARMONY = "harmony"
-    PITCH_METER_MINI = "pitch_meter_mini"
-    VOCAL_PRACTICE_MINI = "vocal_practice_mini"
+    WX = "wx"
     DEVELOPMENT = "development"
 
 

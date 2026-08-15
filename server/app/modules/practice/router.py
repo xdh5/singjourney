@@ -1,7 +1,12 @@
-from fastapi import APIRouter, Depends, Query, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.db.session import get_db
+from app.core.localization import resolve_request_locale
 from app.modules.accounts.dependencies import require_current_user
 from app.modules.accounts.models import User
 from app.modules.practice.constants import (
@@ -12,10 +17,105 @@ from app.modules.practice.schemas import (
     PracticeSessionCreateRequest,
     PracticeSessionResponse,
     PracticeStatisticsResponse,
+    PracticeCatalogResponse,
+    PracticeFavoritesResponse,
+    PracticeManifestResponse,
+    DailyPracticeMessageResponse,
 )
-from app.modules.practice.service import record_completed_practice, read_practice_statistics
+from app.modules.practice.constants import (
+    MASTER_ACCOMPANIMENT_FILENAME,
+    OCTAVE_CONNECTION_EXERCISE_KEY,
+)
+from app.modules.practice.score import build_octave_connection_manifest
+from app.modules.practice.service import (
+    read_daily_practice_message,
+    read_practice_catalog,
+    read_practice_favorites,
+    read_practice_statistics,
+    record_completed_practice,
+    add_practice_favorite,
+    remove_practice_favorite,
+)
 
 router = APIRouter(prefix="/practice", tags=["practice"])
+
+
+@router.get(
+    "/exercises/{exercise_id}/manifest",
+    response_model=PracticeManifestResponse,
+    summary="Read a voice-specific segment of the shared accompaniment",
+)
+def get_practice_manifest(
+    exercise_id: str,
+    voice: str = Query(pattern="^(male|female)$"),
+) -> PracticeManifestResponse:
+    if exercise_id != OCTAVE_CONNECTION_EXERCISE_KEY:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise has no accompaniment")
+    return PracticeManifestResponse.model_validate(
+        build_octave_connection_manifest(
+            voice,
+            f"/practice/assets/{MASTER_ACCOMPANIMENT_FILENAME}",
+        )
+    )
+
+
+@router.get("/assets/{filename}", response_class=FileResponse, include_in_schema=False)
+def get_practice_asset(
+    filename: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    if filename != MASTER_ACCOMPANIMENT_FILENAME:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice asset not found")
+    asset_path = settings.practice_asset_directory / filename
+    if not asset_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice asset not found")
+    return FileResponse(asset_path, media_type="audio/ogg", filename=filename)
+
+
+@router.get("/catalog", response_model=PracticeCatalogResponse, summary="Read the practice catalog")
+def get_practice_catalog(
+    locale: str = Depends(resolve_request_locale),
+    db: Session = Depends(get_db),
+) -> PracticeCatalogResponse:
+    return PracticeCatalogResponse.model_validate(read_practice_catalog(db, locale))
+
+
+@router.get("/favorites", response_model=PracticeFavoritesResponse)
+def get_practice_favorites(
+    user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> PracticeFavoritesResponse:
+    return PracticeFavoritesResponse(exercise_ids=read_practice_favorites(db, user.id))
+
+
+@router.put("/favorites/{exercise_id}", status_code=status.HTTP_204_NO_CONTENT)
+def put_practice_favorite(
+    exercise_id: str,
+    user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    if not add_practice_favorite(db, user.id, exercise_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
+
+
+@router.delete("/favorites/{exercise_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_practice_favorite(
+    exercise_id: str,
+    user: User = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    remove_practice_favorite(db, user.id, exercise_id)
+
+
+@router.get("/daily-message", response_model=DailyPracticeMessageResponse)
+def get_daily_practice_message(
+    locale: str = Depends(resolve_request_locale),
+    db: Session = Depends(get_db),
+) -> DailyPracticeMessageResponse:
+    message = read_daily_practice_message(db, datetime.now().date(), locale)
+    if message is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Daily message is unavailable")
+    return DailyPracticeMessageResponse.model_validate(message)
 
 
 @router.post(
@@ -64,7 +164,8 @@ def get_practice_statistics(
         ge=MINIMUM_TIMEZONE_OFFSET_MINUTES,
         le=MAXIMUM_TIMEZONE_OFFSET_MINUTES,
     ),
+    locale: str = Depends(resolve_request_locale),
     user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ) -> PracticeStatisticsResponse:
-    return read_practice_statistics(db, user.id, timezone_offset_minutes)
+    return read_practice_statistics(db, user.id, timezone_offset_minutes, locale)

@@ -1,0 +1,8 @@
+{
+  "name": "@singjourney/web-release",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@singjourney/client": "*"
+  }
+}
