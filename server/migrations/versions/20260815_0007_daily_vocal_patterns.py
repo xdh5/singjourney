@@ -62,7 +62,7 @@ def upgrade() -> None:
             "id": row[0], "category_key": row[1], "title_zh_hans": row[2], "title_en": row[3],
             "tip_zh_hans": row[4], "tip_en": row[5], "pattern": row[6],
             "recommended_syllables": row[7], "tempo": row[8], "repetitions": row[9],
-            "intensity": row[10], "enabled": row[11], "sort_order": index * 10,
+            "intensity": row[10], "enabled": True, "sort_order": index * 10,
         }
         for index, row in enumerate(EXERCISES, start=1)
     ]
@@ -95,6 +95,9 @@ def upgrade() -> None:
         result = bind.execute(update_statement, row)
         if result.rowcount == 0:
             bind.execute(insert_statement, row)
+    bind.execute(sa.text(
+        "DELETE FROM practice_exercises WHERE id = 'natural-lip-trill-octave'"
+    ))
 
 
 def downgrade() -> None:
