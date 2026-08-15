@@ -89,7 +89,7 @@ const currentRange = computed(() => voiceRanges[props.selected])
   flex-direction: column;
 }
 .range-label {
-  color: #81928c;
+  color: #587168;
   font-size: 18rpx;
   line-height: 1;
 }
@@ -97,7 +97,7 @@ const currentRange = computed(() => voiceRanges[props.selected])
   margin-top: 9rpx;
   color: $singjourney-green-dark;
   font-size: 29rpx;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 }
@@ -128,7 +128,7 @@ const currentRange = computed(() => voiceRanges[props.selected])
   gap: 8rpx;
   border: 1px solid transparent;
   border-radius: 21rpx;
-  color: #8b9994;
+  color: #60756e;
 }
 .voice-option.active {
   border-color: #bddfd3;
@@ -136,13 +136,14 @@ const currentRange = computed(() => voiceRanges[props.selected])
   background: linear-gradient(135deg, #edf8f4 0%, #f5faf8 100%);
 }
 .gender-symbol {
+  display: none;
   font-size: 32rpx;
   font-weight: 500;
   line-height: 1;
 }
 .voice-label {
   font-size: 22rpx;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
 }
 </style>

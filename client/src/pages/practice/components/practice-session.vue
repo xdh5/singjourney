@@ -1,22 +1,10 @@
 ﻿<template>
   <view class="session-page">
-    <view class="session-header">
-      <view
-        class="back"
-        role="button"
-        @tap="closeSession"
-        ><uni-icons
-          type="back"
-          :size="28"
-          color="#356b5b"
-      /></view>
-      <view class="session-copy">
-        <text class="session-title">{{ t('practice.exercises.mumOctave.title') }}</text>
-        <text class="session-range"
-          >{{ t(`practice.voices.${manifest.voice}`) }} · {{ rangeLabel }}</text
-        >
-      </view>
-    </view>
+    <app-navbar
+      title-key="nav.practice"
+      intercept-back
+      @back="closeSession"
+    />
 
     <view
       class="canvas-stage"
@@ -69,15 +57,18 @@ import { useI18n } from 'vue-i18n'
 import {
   AudioFrameAccumulator,
   PitchEngine,
-  midiToNoteName,
   pcm16ToFloat32
 } from '@singjourney/pitch-core'
+import { createCurveCommands } from '@singjourney/curve-layout'
 import type { StoredPitchPoint } from '@singjourney/contracts'
 import { createPitchCanvasSurface } from '../../../utils/pitch/canvas'
 import { createPcmPreview, deleteTemporaryAudio } from '../../../utils/audio/files'
+import { createRecordingAudioEncoder } from '../../../utils/audio/encoder'
+import { createPitchWorker } from '../../../utils/pitch/worker'
 import { exportAudio } from '../../../utils/share'
 import { getWindowMetrics } from '../../../utils/window-metrics'
 import RecordingToolbar from '../../../components/recording-toolbar.vue'
+import AppNavbar from '../../../components/app-navbar.vue'
 import { createPracticeAudioTransport } from '../../../utils/practice/audio-transport'
 import {
   connectRecorder,
@@ -117,13 +108,16 @@ type SessionStatus =
   | 'playbackPaused'
 
 const CANVAS_MINIMUM_HEIGHT = 320
-const SESSION_HEADER_HEIGHT_RPX = 92
+const SESSION_HEADER_HEIGHT_PX = 36
 const AXIS_WIDTH = 48
 const ROW_PADDING = 2
 const PIXELS_PER_SECOND = 72
-const PLAYHEAD_RATIO = 0.38
-const RENDER_INTERVAL_MS = 1000 / 30
+const PLAYHEAD_RATIO = 0.46
+const DIRECT_RENDER_INTERVAL_MS = 1000 / 60
+const PCM_RENDER_INTERVAL_MS = 1000 / 30
+const LEGACY_CANVAS_RENDER_INTERVAL_MS = 120
 const ANALYSIS_INTERVAL_MS = 80
+const PCM_BLOCK_SIZE = 64 * 1024
 const TIME_BAR_HEIGHT_RPX = 50
 const TOOLBAR_HEIGHT_RPX = 144
 
@@ -134,7 +128,6 @@ const canvasHeight = ref(480)
 const toolbarHeight = ref(72)
 const safeBottom = ref(0)
 const userPoints: StoredPitchPoint[] = []
-const pcmChunks: Uint8Array[] = []
 const audioTransport = createPracticeAudioTransport()
 let engineSampleRate = recorderAnalysisConfig.sampleRate
 let engine = new PitchEngine({
@@ -148,9 +141,18 @@ const accumulator = new AudioFrameAccumulator(recorderAnalysisConfig.frameSize)
 let context: any = null
 let directCanvas = false
 let commitCanvas = () => {}
+let canvasDrawQueued = false
+let pitchWorker: ReturnType<typeof createPitchWorker> = null
 let renderTimer: ReturnType<typeof setInterval> | undefined
 let lastAnalysisAt = 0
+let workerAnalysisStartedAt = 0
+let lastWorkerResultAt = 0
 let unvoicedFrames = 0
+let pcmBlocks: Uint8Array[] = []
+let pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
+let pcmBlockOffset = 0
+let pcmByteLength = 0
+let recordedPcmByteLength = 0
 const recordingPath = ref('')
 let recordingBlob: Blob | undefined
 let temporaryPcmPreview = ''
@@ -162,12 +164,12 @@ let recordingSessionOpen = false
 let completedEventSent = false
 let practiceEventId = ''
 let practiceStartedAt = ''
+const recordingAudioEncoder = createRecordingAudioEncoder({
+  enabled: () => recorderCapabilities.capturesPcmFrames,
+  worker: () => pitchWorker
+})
 
 const canvasStyle = computed(() => `width:${canvasWidth.value}px;height:${canvasHeight.value}px`)
-const rangeLabel = computed(
-  () =>
-    `${midiToNoteName(props.manifest.range.minimumMidi)}–${midiToNoteName(props.manifest.range.maximumMidi)}`
-)
 const timeLabel = computed(
   () => `${formatTime(position.value)} / ${formatTime(props.manifest.duration)}`
 )
@@ -229,7 +231,9 @@ async function initCanvas() {
   safeBottom.value = metrics.safeBottom
   toolbarHeight.value = uni.upx2px(TOOLBAR_HEIGHT_RPX) + safeBottom.value
   const reservedHeight =
-    uni.upx2px(SESSION_HEADER_HEIGHT_RPX + TIME_BAR_HEIGHT_RPX + TOOLBAR_HEIGHT_RPX) +
+    metrics.statusBarHeight +
+    SESSION_HEADER_HEIGHT_PX +
+    uni.upx2px(TIME_BAR_HEIGHT_RPX + TOOLBAR_HEIGHT_RPX) +
     safeBottom.value
   canvasHeight.value = Math.max(CANVAS_MINIMUM_HEIGHT, metrics.windowHeight - reservedHeight)
   await nextTick()
@@ -243,7 +247,31 @@ async function initCanvas() {
   context = surface.context
   directCanvas = surface.direct
   commitCanvas = surface.commit
+  initPitchWorker()
   draw()
+}
+
+function initPitchWorker() {
+  if (pitchWorker || !recorderCapabilities.capturesPcmFrames) return
+  try {
+    pitchWorker = createPitchWorker(handlePitchWorkerMessage, disablePitchWorker)
+  } catch {
+    pitchWorker = null
+  }
+}
+
+function handlePitchWorkerMessage(message: any) {
+  if (recordingAudioEncoder.handleMessage(message)) return
+  if (message?.type === 'pitch-result') {
+    lastWorkerResultAt = Date.now()
+    if (status.value === 'recording' && message.result) handlePitchResult(message.result)
+  }
+}
+
+function disablePitchWorker() {
+  recordingAudioEncoder.fail()
+  pitchWorker?.terminate?.()
+  pitchWorker = null
 }
 
 async function startPractice() {
@@ -251,9 +279,14 @@ async function startPractice() {
   status.value = 'preparing'
   position.value = 0
   userPoints.splice(0)
-  pcmChunks.splice(0)
+  resetPcm()
+  recordedPcmByteLength = 0
+  workerAnalysisStartedAt = 0
+  lastWorkerResultAt = 0
+  lastAnalysisAt = 0
   engine.reset()
   accumulator.reset()
+  pitchWorker?.postMessage({ type: 'reset' })
   try {
     await audioTransport.prepare(
       props.manifest.audioPath,
@@ -261,10 +294,12 @@ async function startPractice() {
       props.manifest.duration
     )
     await requestMicrophonePermission()
+    await recordingAudioEncoder.start()
     resumeRecorderOnGate = recorderCapabilities.startsPausedForAudioGate
     await startRecorder({ startPaused: recorderCapabilities.startsPausedForAudioGate })
     recordingSessionOpen = true
   } catch {
+    recordingAudioEncoder.discard()
     status.value = 'ready'
     uni.showModal({
       title: t('record.microphonePermissionTitle'),
@@ -363,10 +398,22 @@ function resumePracticeSession() {
 
 async function refreshPausedPreview() {
   try {
+    const encodedPreviewPath = await recordingAudioEncoder.createPreview()
+    if (encodedPreviewPath) {
+      deleteTemporaryAudio(temporaryPcmPreview)
+      temporaryPcmPreview = encodedPreviewPath
+      recordingPath.value = encodedPreviewPath
+      recordingBlob = undefined
+      return
+    }
     let previewPath = ''
     let previewBlob: Blob | undefined
-    if (recorderCapabilities.capturesPcmFrames && pcmChunks.length > 0) {
-      previewPath = await createPcmPreview(joinPcmChunks())
+    if (
+      recorderCapabilities.capturesPcmFrames &&
+      pcmByteLength > 0 &&
+      pcmByteLength === recordedPcmByteLength
+    ) {
+      previewPath = await createPcmPreview(getPcmChunks(), pcmByteLength)
     } else if (recorderCapabilities.startsPausedForAudioGate) {
       const preview = await createPausedRecorderPreview()
       previewPath = preview?.tempFilePath || ''
@@ -385,15 +432,32 @@ async function refreshPausedPreview() {
   }
 }
 
-function joinPcmChunks() {
-  const byteLength = pcmChunks.reduce((total, chunk) => total + chunk.byteLength, 0)
-  const pcm = new Uint8Array(byteLength)
-  let offset = 0
-  for (const chunk of pcmChunks) {
-    pcm.set(chunk, offset)
-    offset += chunk.byteLength
+function appendPcm(buffer: ArrayBuffer) {
+  const source = new Uint8Array(buffer)
+  let sourceOffset = 0
+  while (sourceOffset < source.length) {
+    const writable = Math.min(source.length - sourceOffset, PCM_BLOCK_SIZE - pcmBlockOffset)
+    pcmBlock.set(source.subarray(sourceOffset, sourceOffset + writable), pcmBlockOffset)
+    pcmBlockOffset += writable
+    pcmByteLength += writable
+    sourceOffset += writable
+    if (pcmBlockOffset === PCM_BLOCK_SIZE) {
+      pcmBlocks.push(pcmBlock)
+      pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
+      pcmBlockOffset = 0
+    }
   }
-  return pcm.buffer
+}
+
+function resetPcm() {
+  pcmBlocks = []
+  pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
+  pcmBlockOffset = 0
+  pcmByteLength = 0
+}
+
+function getPcmChunks() {
+  return pcmBlockOffset > 0 ? [...pcmBlocks, pcmBlock.subarray(0, pcmBlockOffset)] : pcmBlocks
 }
 
 function analyzeFrame(
@@ -401,8 +465,30 @@ function analyzeFrame(
   sampleRate = recorderAnalysisConfig.sampleRate
 ) {
   if (status.value !== 'recording') return
-  if (recorderCapabilities.capturesPcmFrames && buffer instanceof ArrayBuffer)
-    pcmChunks.push(new Uint8Array(buffer.slice(0)))
+  if (recorderCapabilities.capturesPcmFrames) {
+    if (!(buffer instanceof ArrayBuffer)) return
+    recordedPcmByteLength += buffer.byteLength
+    appendPcm(buffer)
+    if (pitchWorker) {
+      const now = Date.now()
+      if (!workerAnalysisStartedAt) workerAnalysisStartedAt = now
+      try {
+        pitchWorker.postMessage({
+          type: 'analyze',
+          buffer,
+          sampleRate,
+          time: currentPosition()
+        })
+      } catch {
+        disablePitchWorker()
+      }
+      const workerResponsive = lastWorkerResultAt
+        ? now - lastWorkerResultAt < 1200
+        : now - workerAnalysisStartedAt < 1200
+      if (pitchWorker && workerResponsive) return
+      disablePitchWorker()
+    }
+  }
   const now = Date.now()
   if (now - lastAnalysisAt < ANALYSIS_INTERVAL_MS) return
   lastAnalysisAt = now
@@ -419,14 +505,22 @@ function analyzeFrame(
   const samples = buffer instanceof Float32Array ? buffer : pcm16ToFloat32(buffer)
   accumulator.push(samples, (frame: Float32Array) => {
     const result = engine.analyze(frame, currentPosition())
-    if (!result) return
-    if (result.voiced && result.midi !== null) {
-      unvoicedFrames = 0
-      userPoints.push({ time: result.time, midi: result.midi, confidence: result.confidence })
-    } else if (++unvoicedFrames === 3) {
-      userPoints.push({ time: result.time, midi: null, confidence: 0 })
-    }
+    if (result) handlePitchResult(result)
   })
+}
+
+function handlePitchResult(result: {
+  time: number
+  midi: number | null
+  confidence: number
+  voiced: boolean
+}) {
+  if (result.voiced && result.midi !== null) {
+    unvoicedFrames = 0
+    userPoints.push({ time: result.time, midi: result.midi, confidence: result.confidence })
+  } else if (++unvoicedFrames === 3) {
+    userPoints.push({ time: result.time, midi: null, confidence: 0 })
+  }
 }
 
 function endPractice() {
@@ -444,18 +538,29 @@ async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
   if (discardPendingRecording) {
     discardPendingRecording = false
     deleteTemporaryAudio(result.tempFilePath)
+    recordingAudioEncoder.discard()
+    resetPcm()
+    recordedPcmByteLength = 0
     return
   }
   if (temporaryPcmPreview && temporaryPcmPreview !== result.tempFilePath)
     deleteTemporaryAudio(temporaryPcmPreview)
   temporaryPcmPreview = ''
-  recordingPath.value = result.tempFilePath
-  recordingBlob = result.blob
-  if (recorderCapabilities.capturesPcmFrames && pcmChunks.length > 0) {
-    deleteTemporaryAudio(temporaryPcmPreview)
-    temporaryPcmPreview = await createPcmPreview(joinPcmChunks())
-    recordingPath.value = temporaryPcmPreview
+  let fallbackPath = result.tempFilePath
+  if (
+    recorderCapabilities.capturesPcmFrames &&
+    pcmByteLength > 0 &&
+    pcmByteLength === recordedPcmByteLength
+  ) {
+    fallbackPath = await createPcmPreview(getPcmChunks(), pcmByteLength)
+    deleteTemporaryAudio(result.tempFilePath)
   }
+  recordingPath.value = await recordingAudioEncoder.finalize(fallbackPath)
+  recordingBlob = result.blob
+  resetPcm()
+  recordedPcmByteLength = 0
+  workerAnalysisStartedAt = 0
+  lastWorkerResultAt = 0
   status.value = 'completed'
   position.value = props.manifest.duration
   draw()
@@ -536,9 +641,12 @@ function clearPractice() {
   recordingBlob = undefined
   position.value = 0
   userPoints.splice(0)
-  pcmChunks.splice(0)
+  recordingAudioEncoder.discard()
+  resetPcm()
+  recordedPcmByteLength = 0
   engine.reset()
   accumulator.reset()
+  pitchWorker?.postMessage({ type: 'reset' })
   status.value = 'ready'
   completedEventSent = false
   practiceEventId = ''
@@ -565,10 +673,15 @@ function currentPosition() {
 
 function startRenderTimer() {
   stopRenderTimer()
+  const interval = recorderCapabilities.capturesPcmFrames
+    ? PCM_RENDER_INTERVAL_MS
+    : directCanvas
+      ? DIRECT_RENDER_INTERVAL_MS
+      : LEGACY_CANVAS_RENDER_INTERVAL_MS
   renderTimer = setInterval(() => {
     position.value = currentPosition()
     draw()
-  }, RENDER_INTERVAL_MS)
+  }, interval)
 }
 
 function stopRenderTimer() {
@@ -577,6 +690,15 @@ function stopRenderTimer() {
 }
 
 function draw() {
+  if (!context || canvasDrawQueued) return
+  canvasDrawQueued = true
+  void nextTick(() => {
+    canvasDrawQueued = false
+    drawCanvas()
+  })
+}
+
+function drawCanvas() {
   if (!context) return
   const ctx = context
   const width = canvasWidth.value
@@ -610,19 +732,19 @@ function draw() {
     ctx.fillRect(x, y, Math.max(2, endX - x), Math.max(3, rowHeight * 0.52))
   }
 
+  const commands = createCurveCommands(userPoints, {
+    startTime: viewStart,
+    width: plotWidth,
+    pixelsPerSecond: PIXELS_PER_SECOND,
+    maxMidi: maximumMidi,
+    rowHeight
+  })
   setStroke(ctx, '#356b5b', 2.5)
   ctx.beginPath()
-  let drawing = false
-  for (const point of userPoints) {
-    if (point.time < viewStart || point.time > viewEnd || point.midi === null) {
-      drawing = false
-      continue
-    }
-    const x = (point.time - viewStart) * PIXELS_PER_SECOND
-    const y = (maximumMidi - point.midi + 0.5) * rowHeight
-    if (!drawing) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-    drawing = true
+  for (const command of commands) {
+    if (command.type === 'move') ctx.moveTo(command.x, command.y)
+    else if (command.type === 'line') ctx.lineTo(command.x, command.y)
+    else if (command.type === 'quad') ctx.quadraticCurveTo(command.cx, command.cy, command.x, command.y)
   }
   ctx.stroke()
 
@@ -670,8 +792,12 @@ function cleanup() {
     stopRecorder()
   }
   disconnectRecorder()
+  recordingAudioEncoder.discard()
+  pitchWorker?.terminate?.()
+  pitchWorker = null
   audioTransport.destroy()
   deleteTemporaryAudio(temporaryPcmPreview)
+  if (recordingPath.value !== temporaryPcmPreview) deleteTemporaryAudio(recordingPath.value)
 }
 </script>
 
@@ -682,38 +808,6 @@ function cleanup() {
   overflow: hidden;
   flex-direction: column;
   background: #fff;
-}
-.session-header {
-  display: flex;
-  min-height: 92rpx;
-  align-items: center;
-  padding: 12rpx 24rpx;
-  border-bottom: 1px solid #d3e2dc;
-  box-sizing: border-box;
-}
-.back {
-  display: flex;
-  width: 64rpx;
-  height: 64rpx;
-  align-items: center;
-  justify-content: center;
-  color: #356b5b;
-  font-size: 54rpx;
-}
-.session-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-.session-title {
-  color: #294c43;
-  font-size: 28rpx;
-  font-weight: 900;
-}
-.session-range {
-  margin-top: 5rpx;
-  color: #6b8179;
-  font-size: 21rpx;
 }
 .canvas-stage {
   position: relative;

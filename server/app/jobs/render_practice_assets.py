@@ -1,8 +1,9 @@
 import argparse
 from pathlib import Path
 
+from app.modules.practice.constants import PRACTICE_EXERCISE_DEFINITIONS
 from app.modules.practice.renderer import render_practice_score
-from app.modules.practice.score import build_octave_connection_master_score
+from app.modules.practice.score import build_practice_master_score
 
 
 def main() -> None:
@@ -10,7 +11,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--soundfont", type=Path, required=True)
     args = parser.parse_args()
-    render_practice_score(build_octave_connection_master_score(), args.output, args.soundfont)
+    for definition in PRACTICE_EXERCISE_DEFINITIONS:
+        render_practice_score(build_practice_master_score(definition.exercise_key), args.output, args.soundfont)
 
 
 if __name__ == "__main__":

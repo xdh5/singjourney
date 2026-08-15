@@ -8,7 +8,6 @@
     "recordDetail": "Recording Details",
     "recordings": "Recordings",
     "practice": "Voice Scale Practice",
-    "practiceRecordings": "Practice Recordings",
     "practiceStats": "Practice Statistics",
     "share": "Voice Practice Share",
     "profile": "Me"
@@ -21,7 +20,6 @@
     "dailyPracticeDescription": "Follow your training plan and build your voice",
     "todayPracticedPrefix": "Practiced today",
     "minutesUnit": "min",
-    "profileSubtitle": "Your profile",
     "practiceTitle": "Scientific Practice, Step by Step",
     "practiceSubtitle": "Choose a suitable exercise and follow the accompaniment at its rhythm.",
     "practiceEyebrow": "Today's practice plan",
@@ -31,11 +29,10 @@
     "recordings": "Recordings",
     "recordingsDescription": "Play and manage your recordings",
     "practiceRecords": "Practice Statistics",
-    "practiceRecordsDescription": "Review daily activity and overall progress",
-    "practiceRecordings": "Practice Recordings",
-    "practiceRecordingsDescription": "Replay and manage accompanied practice recordings"
+    "practiceRecordsDescription": "Review daily activity and overall progress"
   },
   "account": {
+    "defaultNickname": "Singing Enthusiast",
     "statisticsLoginTitle": "Sign in to save statistics",
     "statisticsLoginWarning": "Signing in saves and syncs practice statistics across devices. Without an account, data stays only on this device and may be lost when storage is cleared, the mini program is removed, or the device changes.",
     "login": "Sign in with WeChat",
@@ -43,19 +40,13 @@
     "loginFailed": "WeChat sign-in failed. Try again",
     "editProfile": "Tap to edit your avatar and nickname",
     "profileTitle": "Set avatar and nickname",
-    "profileDescription": "Use your WeChat avatar and nickname, or choose another avatar and enter a different nickname.",
+    "profileDescription": "Tap the avatar to choose your WeChat avatar, then tap the nickname field to use your WeChat nickname.",
     "nicknamePlaceholder": "Choose or enter a nickname",
     "avatarFailed": "Could not read that avatar. Choose it again",
     "profileRequired": "Choose an avatar or enter a nickname",
     "profileSaveFailed": "Could not save your profile. Try again",
     "later": "Later",
     "save": "Save"
-  },
-  "practiceRecordings": {
-    "localNotice": "Recordings are stored on this device. Clearing app data or changing devices may remove them. Share backups when needed.",
-    "empty": "No practice recordings yet",
-    "emptyDescription": "Recordings from completed accompanied practices will appear here.",
-    "start": "Start accompanied practice"
   },
   "record": {
     "save": "Save",

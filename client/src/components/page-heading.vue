@@ -62,9 +62,11 @@ withDefaults(defineProps<{ title: string; subtitle: string; compact?: boolean }>
 }
 .page-heading.compact .heading-title {
   font-size: 46rpx;
+  font-weight: 700;
   letter-spacing: 1rpx;
 }
 .page-heading.compact .heading-subtitle {
   margin-top: 22rpx;
+  color: #315f51;
 }
 </style>

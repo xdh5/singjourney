@@ -1,14 +1,13 @@
 from dataclasses import asdict, dataclass
 
 from app.modules.practice.constants import (
-    OCTAVE_CONNECTION_COUNT_IN_BEATS,
-    OCTAVE_CONNECTION_EXERCISE_KEY,
-    OCTAVE_CONNECTION_NOTE_BEATS,
-    OCTAVE_CONNECTION_PATTERN,
-    OCTAVE_CONNECTION_PHRASE_REST_BEATS,
-    OCTAVE_CONNECTION_TEMPO_BPM,
-    OCTAVE_CONNECTION_VERSION,
+    CUE_REST_BEATS,
+    GUIDE_NOTE_BEATS,
     MASTER_PIANO_RANGE,
+    PHRASE_LEAD_IN_SECONDS,
+    PIANO_CUE_DURATION_BEATS,
+    PRACTICE_ASSET_VERSION,
+    PRACTICE_EXERCISES_BY_KEY,
     VOICE_PLAYBACK_RANGES,
 )
 
@@ -23,6 +22,14 @@ class TargetNoteEvent:
 
 
 @dataclass(frozen=True)
+class CueNoteEvent:
+    """One short reference note played before a phrase begins."""
+
+    start: float
+    midi: int
+
+
+@dataclass(frozen=True)
 class PracticeScore:
     """Versioned symbolic score used by both audio rendering and Canvas targets."""
 
@@ -33,6 +40,7 @@ class PracticeScore:
     range_start_midi: int
     range_end_midi: int
     duration: float
+    cue_notes: tuple[CueNoteEvent, ...]
     target_notes: tuple[TargetNoteEvent, ...]
 
     def manifest(self, audio_path: str) -> dict[str, object]:
@@ -48,45 +56,54 @@ class PracticeScore:
         }
 
 
-def build_octave_connection_master_score() -> PracticeScore:
-    """Build one authoritative C3-F5 score shared by every voice preset."""
+def build_practice_master_score(exercise_key: str) -> PracticeScore:
+    """Build one authoritative C3-F5 accompaniment for an exercise."""
 
+    definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
     range_start, range_end = MASTER_PIANO_RANGE
-    seconds_per_beat = 60 / OCTAVE_CONNECTION_TEMPO_BPM
-    cursor_beats = float(OCTAVE_CONNECTION_COUNT_IN_BEATS)
+    maximum_offset = max(definition.pattern)
+    seconds_per_beat = 60 / definition.tempo_bpm
+    cursor_seconds = 0.0
+    cue_duration_seconds = PIANO_CUE_DURATION_BEATS * seconds_per_beat
+    cue_rest_seconds = CUE_REST_BEATS * seconds_per_beat
+    cues: list[CueNoteEvent] = []
     events: list[TargetNoteEvent] = []
 
-    for phrase_root in range(range_start, range_end - 12 + 1):
-        for offset in OCTAVE_CONNECTION_PATTERN:
-            start = cursor_beats * seconds_per_beat
-            cursor_beats += OCTAVE_CONNECTION_NOTE_BEATS
+    for phrase_root in range(range_start, range_end - maximum_offset + 1):
+        cursor_seconds += PHRASE_LEAD_IN_SECONDS
+        cues.append(CueNoteEvent(start=round(cursor_seconds, 6), midi=phrase_root))
+        cursor_seconds += cue_duration_seconds + cue_rest_seconds
+        for offset in definition.pattern:
+            start = cursor_seconds
+            cursor_seconds += GUIDE_NOTE_BEATS * seconds_per_beat
             events.append(TargetNoteEvent(
                 start=round(start, 6),
-                end=round(cursor_beats * seconds_per_beat, 6),
+                end=round(cursor_seconds, 6),
                 midi=phrase_root + offset,
             ))
-        cursor_beats += OCTAVE_CONNECTION_PHRASE_REST_BEATS
 
     return PracticeScore(
-        exercise_key=OCTAVE_CONNECTION_EXERCISE_KEY,
-        version=OCTAVE_CONNECTION_VERSION,
+        exercise_key=definition.exercise_key,
+        version=PRACTICE_ASSET_VERSION,
         voice="master",
-        tempo_bpm=OCTAVE_CONNECTION_TEMPO_BPM,
+        tempo_bpm=definition.tempo_bpm,
         range_start_midi=range_start,
         range_end_midi=range_end,
-        duration=round(cursor_beats * seconds_per_beat, 6),
+        duration=round(cursor_seconds, 6),
+        cue_notes=tuple(cues),
         target_notes=tuple(events),
     )
 
 
-def build_octave_connection_manifest(voice: str, audio_path: str) -> dict[str, object]:
-    """Slice one voice preset from the shared master score without duplicating audio."""
+def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> dict[str, object]:
+    """Slice a voice preset from one shared C3-F5 master accompaniment."""
 
     if voice not in VOICE_PLAYBACK_RANGES:
         raise ValueError(f"Unsupported voice preset: {voice}")
-    score = build_octave_connection_master_score()
+    score = build_practice_master_score(exercise_key)
+    pattern = PRACTICE_EXERCISES_BY_KEY[exercise_key].pattern
     range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
-    phrase_size = len(OCTAVE_CONNECTION_PATTERN)
+    phrase_size = len(pattern)
     phrases = [
         score.target_notes[index:index + phrase_size]
         for index in range(0, len(score.target_notes), phrase_size)
@@ -94,17 +111,22 @@ def build_octave_connection_manifest(voice: str, audio_path: str) -> dict[str, o
     selected = [
         phrase
         for phrase in phrases
-        if phrase and min(note.midi for note in phrase) >= range_start
+        if phrase
+        and min(note.midi for note in phrase) >= range_start
         and max(note.midi for note in phrase) <= range_end
     ]
     if not selected:
-        raise ValueError(f"Voice preset has no playable phrases: {voice}")
+        raise ValueError(f"Voice preset has no playable phrases: {exercise_key}/{voice}")
 
     first_event = selected[0][0]
     last_event = selected[-1][-1]
-    segment_start = 0.0 if first_event is score.target_notes[0] else first_event.start
-    phrase_rest_seconds = OCTAVE_CONNECTION_PHRASE_REST_BEATS * 60 / score.tempo_bpm
-    segment_end = min(score.duration, last_event.end + phrase_rest_seconds)
+    cue_duration_seconds = PIANO_CUE_DURATION_BEATS * 60 / score.tempo_bpm
+    cue_rest_seconds = CUE_REST_BEATS * 60 / score.tempo_bpm
+    segment_start = max(
+        0.0,
+        first_event.start - PHRASE_LEAD_IN_SECONDS - cue_duration_seconds - cue_rest_seconds,
+    )
+    segment_end = min(score.duration, last_event.end)
     notes = [note for phrase in selected for note in phrase]
     return {
         "exercise_key": score.exercise_key,

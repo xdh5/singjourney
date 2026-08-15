@@ -6,30 +6,16 @@
     >
       <view class="avatar">
         <image
-          v-if="session?.user.avatar_data_url"
           class="avatar-image"
-          :src="session.user.avatar_data_url"
+          :src="session?.user.avatar_data_url || defaultAvatar"
           mode="aspectFill"
         />
-        <uni-icons
-          v-else
-          type="person-filled"
-          :size="44"
-          color="#0f4d3b"
-        />
       </view>
-      <text class="title">{{ session?.user.display_name || t('nav.profile') }}</text>
-      <text class="subtitle">{{ session ? t('account.editProfile') : t('home.profileSubtitle') }}</text>
+      <text class="title">{{ session?.user.display_name || t('account.defaultNickname') }}</text>
     </view>
     <view class="profile-links">
       <profile-link
-        icon="videocam-filled"
-        :title="t('home.practiceRecordings')"
-        :description="t('home.practiceRecordingsDescription')"
-        @select="open('/pages/practice-recordings/index')"
-      />
-      <profile-link
-        icon="bars"
+        icon="statistics"
         :title="t('home.practiceRecords')"
         :description="t('home.practiceRecordsDescription')"
         @select="openPracticeStats"
@@ -99,6 +85,7 @@ import { setPageTitle } from '../../i18n'
 import ProfileLink from './components/profile-link.vue'
 import { useAuthenticationStore } from '../../stores/authentication'
 import { avatarFileToDataUrl } from '../../utils/media/avatar'
+import defaultAvatar from '../../assets/profile/default-avatar.jpg'
 
 const { t, locale } = useI18n()
 const authenticationStore = useAuthenticationStore()
@@ -159,7 +146,7 @@ function editProfile() {
 
 function showProfileEditor() {
   displayNameDraft.value = session.value?.user.display_name || ''
-  avatarPreview.value = session.value?.user.avatar_data_url || ''
+  avatarPreview.value = session.value?.user.avatar_data_url || defaultAvatar
   avatarDataUrlDraft.value = undefined
   profileEditorVisible.value = true
 }
@@ -216,7 +203,7 @@ function finishProfileEditor() {
 }
 .profile-card {
   display: flex;
-  min-height: 360rpx;
+  min-height: 280rpx;
   align-items: center;
   justify-content: center;
   flex-direction: column;
@@ -241,15 +228,10 @@ function finishProfileEditor() {
   height: 100%;
 }
 .title {
-  margin-top: 24rpx;
+  margin-top: 16rpx;
   color: $singjourney-green-dark;
-  font-size: 44rpx;
-  font-weight: 900;
-}
-.subtitle {
-  margin-top: 12rpx;
-  color: $singjourney-text-secondary;
-  font-size: 25rpx;
+  font-size: 34rpx;
+  font-weight: 700;
 }
 .profile-links {
   display: flex;

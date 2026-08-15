@@ -32,7 +32,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import dailyPracticeHero from '../../../assets/home/daily-practice-hero-v2.png'
+import dailyPracticeHero from '../../../assets/home/daily-practice-hero-v2.jpg'
 
 defineProps<{ description: string; todayMinutes: number }>()
 const emit = defineEmits<{ select: [] }>()

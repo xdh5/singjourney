@@ -1,7 +1,11 @@
 <template>
   <view class="navbar" :style="{ paddingTop: `${statusBarHeight}px` }">
     <view class="navbar-main">
-      <view class="back-button" role="button" @tap="goBack">
+      <view
+        class="back-button"
+        role="button"
+        @tap="goBack"
+      >
         <uni-icons type="left" :size="20" color="#ffffff" />
       </view>
       <text class="navbar-title">{{ t(titleKey) }}</text>
@@ -13,11 +17,18 @@
 import { useI18n } from 'vue-i18n'
 import { getWindowMetrics } from '../utils/window-metrics'
 
-defineProps<{ titleKey: string }>()
+const props = withDefaults(defineProps<{ titleKey: string; interceptBack?: boolean }>(), {
+  interceptBack: false
+})
+const emit = defineEmits<{ back: [] }>()
 const { t } = useI18n()
 const { statusBarHeight } = getWindowMetrics()
 
 function goBack() {
+  if (props.interceptBack) {
+    emit('back')
+    return
+  }
   uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/home/index' }) })
 }
 </script>

@@ -5,7 +5,18 @@
     @tap="emit('select')"
   >
     <view class="link-icon">
+      <view
+        v-if="icon === 'statistics'"
+        class="statistics-icon"
+        aria-hidden="true"
+      >
+        <view class="statistics-bar short" />
+        <view class="statistics-bar medium" />
+        <view class="statistics-bar tall" />
+        <view class="statistics-bar middle" />
+      </view>
       <uni-icons
+        v-else
         :type="icon"
         :size="24"
         color="#0f4d3b"
@@ -56,6 +67,37 @@ const emit = defineEmits<{ select: [] }>()
   justify-content: center;
   border-radius: 22rpx;
   background: #e4f3ec;
+}
+
+.statistics-icon {
+  display: flex;
+  width: 38rpx;
+  height: 38rpx;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4rpx;
+}
+
+.statistics-bar {
+  width: 6rpx;
+  border-radius: 5rpx 5rpx 2rpx 2rpx;
+  background: $singjourney-green-dark;
+}
+
+.statistics-bar.short {
+  height: 15rpx;
+}
+
+.statistics-bar.medium {
+  height: 25rpx;
+}
+
+.statistics-bar.tall {
+  height: 36rpx;
+}
+
+.statistics-bar.middle {
+  height: 21rpx;
 }
 
 .link-copy {

@@ -12,6 +12,8 @@ from app.modules.accounts.models import User
 from app.modules.practice.constants import (
     MAXIMUM_TIMEZONE_OFFSET_MINUTES,
     MINIMUM_TIMEZONE_OFFSET_MINUTES,
+    PRACTICE_EXERCISES_BY_KEY,
+    master_accompaniment_filename,
 )
 from app.modules.practice.schemas import (
     PracticeSessionCreateRequest,
@@ -22,11 +24,7 @@ from app.modules.practice.schemas import (
     PracticeManifestResponse,
     DailyPracticeMessageResponse,
 )
-from app.modules.practice.constants import (
-    MASTER_ACCOMPANIMENT_FILENAME,
-    OCTAVE_CONNECTION_EXERCISE_KEY,
-)
-from app.modules.practice.score import build_octave_connection_manifest
+from app.modules.practice.score import build_practice_manifest
 from app.modules.practice.service import (
     read_daily_practice_message,
     read_practice_catalog,
@@ -49,12 +47,14 @@ def get_practice_manifest(
     exercise_id: str,
     voice: str = Query(pattern="^(male|female)$"),
 ) -> PracticeManifestResponse:
-    if exercise_id != OCTAVE_CONNECTION_EXERCISE_KEY:
+    if exercise_id not in PRACTICE_EXERCISES_BY_KEY:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise has no accompaniment")
+    filename = master_accompaniment_filename(exercise_id)
     return PracticeManifestResponse.model_validate(
-        build_octave_connection_manifest(
+        build_practice_manifest(
+            exercise_id,
             voice,
-            f"/practice/assets/{MASTER_ACCOMPANIMENT_FILENAME}",
+            f"/practice/assets/{filename}",
         )
     )
 
@@ -64,7 +64,11 @@ def get_practice_asset(
     filename: str,
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
-    if filename != MASTER_ACCOMPANIMENT_FILENAME:
+    available_filenames = {
+        master_accompaniment_filename(exercise_key)
+        for exercise_key in PRACTICE_EXERCISES_BY_KEY
+    }
+    if filename not in available_filenames:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice asset not found")
     asset_path = settings.practice_asset_directory / filename
     if not asset_path.is_file():
