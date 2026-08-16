@@ -8,7 +8,6 @@ onLaunch(() => {
 </script>
 
 <style lang="scss">
-@import '@dcloudio/uni-ui/lib/uni-scss/index.scss';
 @import './styles/foundations.scss';
 
 page {

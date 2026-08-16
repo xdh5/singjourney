@@ -61,8 +61,8 @@ export async function createPitchCanvasSurface(input: {
 
   // #ifndef MP-WEIXIN
   // #ifndef H5
-  const legacyContext = uni.createCanvasContext(input.id, input.component)
-  return { context: legacyContext, direct: false, commit: () => legacyContext.draw() }
+  const commandContext = uni.createCanvasContext(input.id, input.component)
+  return { context: commandContext, direct: false, commit: () => commandContext.draw() }
   // #endif
   // #endif
 }

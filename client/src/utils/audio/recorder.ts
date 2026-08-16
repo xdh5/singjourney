@@ -9,7 +9,7 @@ export type RecorderEvents = {
   onStart?: () => void
   onFrame?: (buffer: ArrayBuffer | Float32Array, sampleRate?: number) => void
   onStop?: (result: RecorderStopResult) => void
-  onError?: (message: string) => void
+  onError?: (message: string, error?: unknown) => void
 }
 
 let events: RecorderEvents = {}
@@ -25,13 +25,40 @@ webPlatform = true
 // #endif
 
 const manager = webPlatform ? null : (uni as any).getRecorderManager()
+let recorderResumeRequestedAt = 0
+let lastRecorderCommand = '初始化'
+let lastRecorderCommandAt = Date.now()
 
 manager?.onStart(() => events.onStart?.())
-manager?.onFrameRecorded?.((result: { frameBuffer: ArrayBuffer }) =>
+manager?.onFrameRecorded?.((result: { frameBuffer: ArrayBuffer }) => {
+  if (recorderResumeRequestedAt) {
+    console.info('[录音诊断] RecorderManager.resume 后收到首帧 PCM', {
+      elapsedMs: Date.now() - recorderResumeRequestedAt,
+      byteLength: result.frameBuffer.byteLength
+    })
+    recorderResumeRequestedAt = 0
+  }
   events.onFrame?.(result.frameBuffer)
-)
+})
 manager?.onStop((result: RecorderStopResult) => events.onStop?.(result))
-manager?.onError((error: { errMsg?: string }) => events.onError?.(error.errMsg || '录音失败'))
+manager?.onError((error: { errMsg?: string; [key: string]: unknown }) => {
+  const message = error?.errMsg || '录音失败'
+  if (lastRecorderCommand === 'pause' && message.toLowerCase().includes('not recording')) {
+    console.warn('[录音诊断] 忽略切后台后的重复暂停错误', {
+      message,
+      elapsedSinceCommandMs: Date.now() - lastRecorderCommandAt,
+      rawError: error
+    })
+    return
+  }
+  console.error('[录音错误] RecorderManager.onError', {
+    message,
+    lastCommand: lastRecorderCommand,
+    elapsedSinceCommandMs: Date.now() - lastRecorderCommandAt,
+    rawError: error
+  })
+  events.onError?.(message, error)
+})
 
 let webStream: MediaStream | null = null
 let mediaRecorder: MediaRecorder | null = null
@@ -87,16 +114,20 @@ export async function startRecorder(options: { startPaused?: boolean } = {}) {
     return
   }
   if (appPlatform) {
+    markRecorderCommand('start')
     manager.start({ duration: MAX_RECORDING_DURATION_MS, sampleRate: 16000, format: 'wav' })
     return
   }
+  markRecorderCommand('start')
   manager.start({
     duration: MAX_RECORDING_DURATION_MS,
     sampleRate: 16000,
     numberOfChannels: 1,
     encodeBitRate: 96000,
     format: 'PCM',
-    frameSize: 1
+    frameSize: 1,
+    // 自动选择手机、线控耳机或蓝牙耳机麦克风，禁止固定到机身麦克风。
+    audioSource: 'auto'
   })
 }
 
@@ -106,6 +137,8 @@ export function pauseRecorder() {
     stopWebFrames()
     return
   }
+  console.info('[录音诊断] 调用 RecorderManager.pause')
+  markRecorderCommand('pause')
   manager.pause()
 }
 
@@ -126,7 +159,18 @@ export function resumeRecorder() {
     startWebFrames()
     return
   }
+  recorderResumeRequestedAt = Date.now()
+  console.info('[录音诊断] 调用 RecorderManager.resume')
+  markRecorderCommand('resume')
   manager.resume()
+  setTimeout(() => {
+    if (recorderResumeRequestedAt)
+      console.warn('[录音诊断] RecorderManager.resume 500ms 后仍未收到 PCM 首帧')
+  }, 500)
+  setTimeout(() => {
+    if (recorderResumeRequestedAt)
+      console.error('[录音诊断] RecorderManager.resume 1500ms 后仍未收到 PCM 首帧')
+  }, 1500)
 }
 
 export function stopRecorder() {
@@ -135,7 +179,13 @@ export function stopRecorder() {
     mediaRecorder?.stop()
     return
   }
+  markRecorderCommand('stop')
   manager.stop()
+}
+
+function markRecorderCommand(command: string) {
+  lastRecorderCommand = command
+  lastRecorderCommandAt = Date.now()
 }
 
 async function startWebRecorder(startPaused: boolean) {
@@ -149,7 +199,10 @@ async function startWebRecorder(startPaused: boolean) {
   mediaRecorder.ondataavailable = (event) => {
     if (event.data.size > 0) webChunks.push(event.data)
   }
-  mediaRecorder.onerror = () => events.onError?.('录音失败')
+  mediaRecorder.onerror = (error) => {
+    console.error('[录音错误] MediaRecorder.onerror', { rawError: error })
+    events.onError?.('录音失败', error)
+  }
   mediaRecorder.onstop = () => {
     const blob = new Blob(webChunks, { type: mediaRecorder?.mimeType || mimeType || 'audio/webm' })
     stopWebAudio()

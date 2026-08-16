@@ -22,13 +22,7 @@
         :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }"
       />
 
-      <view
-        class="page-mode"
-        @touchstart.stop
-        @touchmove.stop
-      >
-        {{ recordingModeLabel }}
-      </view>
+      <recording-mode-tag :label="recordingModeLabel" />
     </view>
 
     <view class="time-bar">{{ timeLabel }}</view>
@@ -67,9 +61,8 @@ import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { onHide, onLoad, onReady, onShow, onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import AppNavbar from '../../components/app-navbar.vue'
-import { AudioFrameAccumulator, PitchEngine, pcm16ToFloat32 } from '@singjourney/pitch-core'
-import { createCurveCommands } from '@singjourney/curve-layout'
 import RecordingToolbar from '../../components/recording-toolbar.vue'
+import RecordingModeTag from '../../components/recording-mode-tag.vue'
 import {
   MAX_RECORDING_DURATION_SECONDS,
   RECORDING_DURATION_WARNING_AT_SECONDS,
@@ -85,13 +78,32 @@ import {
   RECORDING_TYPE,
   storeRecording
 } from '../../utils/recording/storage'
-import { exportAudio, hidePageShareMenu } from '../../utils/share'
+import {
+  createAudioExportSession,
+  hidePageShareMenu
+} from '../../utils/share'
 import { createAudibleAudioPlayer } from '../../utils/audio/player'
 import { createPitchCanvasSurface } from '../../utils/pitch/canvas'
 import { createPcmPreview, deleteTemporaryAudio } from '../../utils/audio/files'
-import { createRecordingAudioEncoder } from '../../utils/audio/encoder'
+import { createPcmBuffer } from '../../utils/audio/pcm-buffer'
 import { getWindowMetrics } from '../../utils/window-metrics'
-import { createPitchWorker } from '../../utils/pitch/worker'
+import { createLivePitchAnalysis } from '../../utils/pitch/live-analysis'
+import {
+  calculateLivePitchCanvasLayout,
+  LIVE_PITCH_AXIS_WIDTH,
+  LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS,
+  LIVE_PITCH_COMMAND_RENDER_INTERVAL_MS,
+  LIVE_PITCH_PCM_RENDER_INTERVAL_MS,
+  LIVE_PITCH_PIXELS_PER_SECOND
+} from '../../utils/pitch/layout'
+import {
+  createLivePitchVisualClock,
+  drawLivePitchCurve,
+  drawLivePitchPlayhead,
+  LIVE_PITCH_PLAYHEAD_RATIO,
+  LIVE_PITCH_RENDER_DELAY_SECONDS,
+  PLAYBACK_OUTPUT_DELAY_SECONDS
+} from '../../utils/pitch/live-curve'
 import { setPageTitle } from '../../i18n'
 import {
   drawPitchAxis,
@@ -118,7 +130,9 @@ import {
   stopRecorder
 } from '../../utils/audio/recorder'
 import {
+  keepScreenAwakeWhilePageOpen,
   keepScreenAwakeWhileRecording,
+  releasePageScreenAwake,
   releaseRecordingScreenAwake
 } from '../../utils/recording/screen-awake'
 import {
@@ -127,25 +141,22 @@ import {
   TELEMETRY_EVENT,
   trackTelemetry
 } from '../../utils/telemetry'
+import {
+  createPracticeEventId,
+  recordCompletedPractice
+} from '../../services/practice/statistics'
 
 const SAMPLE_RATE = recorderAnalysisConfig.sampleRate
 const BUFFER_SIZE = recorderAnalysisConfig.frameSize
 const MIN_MIDI = PITCH_MINIMUM_MIDI
 const MAX_MIDI = PITCH_MAXIMUM_MIDI
 const ROW_HEIGHT = 18
-const AXIS_WIDTH = 52
-const PIXELS_PER_SECOND = 72
-const CURVE_RENDER_DELAY_SECONDS = 0.07
-const DIRECT_RENDER_INTERVAL_MS = 1000 / 60
-const PCM_RENDER_INTERVAL_MS = 1000 / 30
-const LEGACY_CANVAS_RENDER_INTERVAL_MS = 120
-const WORKER_ANALYSIS_INTERVAL_MS = 50
-const DIRECT_ANALYSIS_INTERVAL_MS = 90
-const PCM_BLOCK_SIZE = 64 * 1024
+const AXIS_WIDTH = LIVE_PITCH_AXIS_WIDTH
+const PIXELS_PER_SECOND = LIVE_PITCH_PIXELS_PER_SECOND
+const DIRECT_RENDER_INTERVAL_MS = LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS
+const PCM_RENDER_INTERVAL_MS = LIVE_PITCH_PCM_RENDER_INTERVAL_MS
+const COMMAND_CANVAS_RENDER_INTERVAL_MS = LIVE_PITCH_COMMAND_RENDER_INTERVAL_MS
 const EXTERNAL_ACTION_PLAYER_EVENT_GUARD_MS = 1500
-const PLAYHEAD_RATIO = 0.5
-const TIME_BAR_HEIGHT_RPX = 38
-const TOOLBAR_HEIGHT_RPX = 144
 
 const canvasWidth = ref(375)
 const canvasHeight = ref(500)
@@ -161,17 +172,6 @@ const timeLabel = ref('00:00')
 const playbackPosition = ref(0)
 const recordingDetailMode = ref(false)
 
-const fallbackPitchDetector = true
-const primaryPitchDetector: 'yin' | 'macleod' = 'yin'
-
-let engineSampleRate = SAMPLE_RATE
-let engine = new PitchEngine({
-  sampleRate: SAMPLE_RATE,
-  bufferSize: BUFFER_SIZE,
-  fallbackDetector: fallbackPitchDetector,
-  primaryDetector: primaryPitchDetector
-})
-const accumulator = new AudioFrameAccumulator(BUFFER_SIZE)
 const points: StoredPitchPoint[] = []
 const player = createAudibleAudioPlayer()
 const instance = getCurrentInstance()
@@ -192,20 +192,20 @@ const toolbarState = computed(() =>
 )
 
 let context: any = null
+const audioExportSession = createAudioExportSession()
 let directCanvas = false
 let canvasNode: any = null
 let commitCanvas = () => {}
 let canvasInitialized = false
 let canvasDrawQueued = false
-let pitchWorker: any = null
-let workerBusy = false
 let startedAt = 0
+let practiceStatisticsRecorded = false
 let pausedDuration = 0
 let pauseStartedAt = 0
 let elapsed = 0
-let sampleCount = 0
 let timer: ReturnType<typeof setInterval> | undefined
 let renderTimer: ReturnType<typeof setInterval> | undefined
+const visualClock = createLivePitchVisualClock()
 const viewportCenterMidi = ref(60)
 let viewportTargetMidi = 60
 let viewportAnimationAt = 0
@@ -226,35 +226,53 @@ let playbackRequestId = 0
 let pendingPlayerSeek: number | null = null
 let awaitingPlayerSeek: number | null = null
 const playbackSourceSession = createRecordingPlaybackSourceSession()
+const RECORD_SCREEN_AWAKE_OWNER = 'record-page'
 let ignoreEndedBefore = 0
 let ignorePlaybackErrorBefore = 0
 let playbackStarting = false
 let playbackStartPosition = 0
+let playbackAudioOffset = 0
 let externalActionPlaybackPosition: number | null = null
 let recordingClockPosition = 0
 let recordingClockAt = 0
 let lastDetectedMidi = 60
-let lastAnalysisAt = 0
-let unvoicedFrames = 0
 let pendingAction: 'save' | 'stop' | null = null
 let tempFilePath = ''
 let tempBlob: Blob | undefined
 let discardStop = false
 let currentRecordingName = ''
-let pcmBlocks: Uint8Array[] = []
-let pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
-let pcmBlockOffset = 0
-let pcmByteLength = 0
+const pcmBuffer = createPcmBuffer()
 let recordedPcmByteLength = 0
 let previewAudioPath = ''
+let pausedPreviewRequestId = 0
 let currentRecordingId = ''
 let durationWarningShown = false
 let durationLimitHandled = false
 let telemetryRecordingId = ''
 let recordingCompletionTracked = false
-const recordingAudioEncoder = createRecordingAudioEncoder({
-  enabled: () => recorderCapabilities.capturesPcmFrames,
-  worker: () => pitchWorker
+let pageDisposed = false
+let currentPageInstance: unknown
+const pitchAnalysis = createLivePitchAnalysis({
+  diagnosticLabel: '自由练声',
+  points,
+  sampleRate: SAMPLE_RATE,
+  frameSize: BUFFER_SIZE,
+  capturesPcmFrames: recorderCapabilities.capturesPcmFrames,
+  isActive: () => isRecording.value,
+  currentTime: currentElapsed,
+  onPcmFrame: (buffer) => {
+    recordedPcmByteLength += buffer.byteLength
+    pcmBuffer.append(buffer)
+    recordingClockPosition = recordedPcmByteLength / (SAMPLE_RATE * 2)
+    recordingClockAt = Date.now()
+  },
+  onResult: (result) => {
+    elapsed = Math.max(elapsed, result.time)
+  },
+  onVoiced: (midi) => {
+    lastDetectedMidi = midi
+    followRecordedPitch(midi)
+  }
 })
 
 const recordLabel = computed(() => {
@@ -278,7 +296,6 @@ const disconnectRecorder = connectRecorder({
     clearTimer()
     clearRenderTimer()
     void releaseRecordingScreenAwake()
-    recordingAudioEncoder.discard()
     uni.showToast({ title: t('record.recordingStartFailed'), icon: 'none' })
   }
 })
@@ -288,12 +305,13 @@ player.onCanplay(() => {
   if (!playbackStarting || pendingPlayerSeek === null) return
   const position = pendingPlayerSeek
   pendingPlayerSeek = null
-  if (position <= 0.01) {
+  const sourcePosition = playbackTimeToSourceTime(position)
+  if (sourcePosition <= 0.01) {
     startPreparedPlayback(position)
     return
   }
   awaitingPlayerSeek = position
-  player.seek(position)
+  player.seek(sourcePosition)
 })
 player.onPlay(() => {
   if (externalActionPlaybackPosition !== null) {
@@ -304,7 +322,7 @@ player.onPlay(() => {
   playbackStarting = false
   isPlaying.value = true
   playbackHasStarted = true
-  const actualTime = Number((player as any).currentTime)
+  const actualTime = sourceTimeToPlaybackTime(Number((player as any).currentTime))
   const position =
     Number.isFinite(actualTime) && Math.abs(actualTime - playbackStartPosition) < 0.5
       ? actualTime
@@ -314,6 +332,7 @@ player.onPlay(() => {
   playbackAnchorAt = Date.now()
   clearTimer()
   timer = setInterval(updateClock, 100)
+  clearViewportAnimationTimer()
   startRenderTimer()
   updateClock()
   draw()
@@ -333,7 +352,7 @@ player.onEnded(() => {
   playbackStarting = false
   pendingPlayerSeek = null
   awaitingPlayerSeek = null
-  const actualTime = Number((player as any).currentTime)
+  const actualTime = sourceTimeToPlaybackTime(Number((player as any).currentTime))
   playbackPosition.value =
     Number.isFinite(actualTime) && Math.abs(actualTime - predictedTime) < 0.5
       ? clamp(actualTime, 0, elapsed)
@@ -370,9 +389,42 @@ onMounted(async () => {
 })
 onLoad(loadRecordingDetail)
 onShow(() => {
-  if (isRecording.value) void keepScreenAwakeWhileRecording()
+  currentPageInstance = currentTopPage()
+  if (pageDisposed) {
+    uni.navigateBack({ delta: 1 })
+    return
+  }
+  void keepScreenAwakeWhilePageOpen(RECORD_SCREEN_AWAKE_OWNER)
 })
-onUnload(() => {
+onHide(() => {
+  pausePageActivity()
+  const hiddenPage = currentPageInstance
+  setTimeout(() => {
+    if (currentTopPage() !== hiddenPage) disposePage()
+  }, 0)
+})
+onUnload(disposePage)
+
+function currentTopPage() {
+  const pages = getCurrentPages()
+  return pages[pages.length - 1]
+}
+
+function pausePageActivity() {
+  if (pageDisposed) return
+  if (isRecording.value) {
+    void pauseActiveRecording(false)
+    return
+  }
+  if (isPlaying.value) pausePlayback()
+  else if (playbackStarting) stopPlayback()
+}
+
+function disposePage() {
+  if (pageDisposed) return
+  pageDisposed = true
+  void releasePageScreenAwake(RECORD_SCREEN_AWAKE_OWNER)
+  invalidatePausedPreview()
   clearTimer()
   clearRenderTimer()
   clearViewportAnimationTimer()
@@ -383,14 +435,11 @@ onUnload(() => {
     stopRecorder()
   }
   disconnectRecorder()
-  recordingAudioEncoder.discard()
-  pitchWorker?.terminate?.()
-  pitchWorker = null
-  workerBusy = false
+  pitchAnalysis.terminate()
   deleteTemporaryAudio(previewAudioPath)
   deleteTemporaryAudio(tempFilePath)
   player.destroy()
-})
+}
 
 async function loadRecordingDetail(options: Record<string, string | undefined> = {}) {
   hidePageShareMenu()
@@ -405,6 +454,7 @@ async function loadRecordingDetail(options: Record<string, string | undefined> =
     if (!recording) throw new Error('recording not found')
     points.splice(0, points.length, ...(Array.isArray(recording.points) ? recording.points : []))
     elapsed = Math.max(0, recording.duration || 0)
+    playbackAudioOffset = Math.max(0, recording.audioOffset || 0)
     playbackPosition.value = elapsed
     playbackHasStarted = false
     hasManualSeek = false
@@ -429,12 +479,11 @@ async function initCanvas() {
   if (canvasInitialized) return
   canvasInitialized = true
   const metrics = getWindowMetrics()
-  safeBottom.value = metrics.safeBottom
-  toolbarHeight.value = uni.upx2px(TOOLBAR_HEIGHT_RPX) + safeBottom.value
-  const footerHeight = uni.upx2px(TIME_BAR_HEIGHT_RPX) + toolbarHeight.value
-  canvasWidth.value = Math.max(1, metrics.windowWidth)
-  const navbarHeight = metrics.statusBarHeight + 36
-  canvasHeight.value = Math.max(240, metrics.windowHeight - footerHeight - navbarHeight)
+  const layout = calculateLivePitchCanvasLayout(metrics)
+  safeBottom.value = layout.safeBottom
+  toolbarHeight.value = layout.toolbarHeight
+  canvasWidth.value = layout.canvasWidth
+  canvasHeight.value = layout.canvasHeight
   await nextTick()
   const surface = await createPitchCanvasSurface({
     id: 'pitchCanvas',
@@ -447,75 +496,20 @@ async function initCanvas() {
   directCanvas = surface.direct
   canvasNode = surface.node
   commitCanvas = surface.commit
-  initPitchWorker()
+  pitchAnalysis.initWorker()
   draw()
-}
-
-function initPitchWorker() {
-  if (pitchWorker) return
-
-  if (!recorderCapabilities.capturesPcmFrames) return
-  try {
-    pitchWorker = createPitchWorker(handlePitchWorkerMessage, disablePitchWorker)
-  } catch {
-    pitchWorker = null
-    workerBusy = false
-  }
-}
-
-function handlePitchWorkerMessage(message: any) {
-  if (recorderCapabilities.capturesPcmFrames) {
-    if (recordingAudioEncoder.handleMessage(message)) return
-    if (message?.type === 'pitch-result') {
-      if (isRecording.value && message.result) handlePitchResult(message.result)
-      return
-    }
-    return
-  }
-  workerBusy = false
-  if (!isRecording.value || message?.type === 'reset') return
-  handlePitchResult(message)
-}
-
-function disablePitchWorker() {
-  workerBusy = false
-  recordingAudioEncoder.fail()
-  pitchWorker?.terminate?.()
-  pitchWorker = null
 }
 
 async function toggleRecording() {
   if (recordingDetailMode.value) return
+  const playbackStateBeforeRecordingAction = {
+    isPlaying: isPlaying.value,
+    playbackStarting,
+    loadedPreviewPath: playbackSourceSession.loadedSourcePath
+  }
   stopPlayback()
   if (isRecording.value) {
-    if (recorderCapabilities.pause) {
-      elapsed = Math.max(elapsed, currentElapsed())
-      pauseRecorder()
-      void releaseRecordingScreenAwake()
-      pauseStartedAt = Date.now()
-      isRecording.value = false
-      playbackPosition.value = elapsed
-      playbackHasStarted = false
-      hasManualSeek = false
-      clearTimer()
-      clearRenderTimer()
-      updateClock()
-      draw()
-      await refreshPausedPlayback()
-      trackTelemetry(TELEMETRY_EVENT.RECORDING_PAUSED, {
-        sourcePage: 'record',
-        recordingId: telemetryRecordingId,
-        durationSeconds: elapsed
-      })
-    } else {
-      pendingAction = 'stop'
-      isRecording.value = false
-      elapsed = Math.max(elapsed, (Date.now() - startedAt - pausedDuration) / 1000)
-      clearTimer()
-      clearRenderTimer()
-      void releaseRecordingScreenAwake()
-      stopRecorder()
-    }
+    await pauseActiveRecording(true)
     return
   }
 
@@ -530,23 +524,30 @@ async function toggleRecording() {
   }
 
   if (!hasStarted.value) {
+    let startStage = 'requestMicrophonePermission'
     try {
       await requestMicrophonePermission()
+      startStage = 'resetAnalysis'
       resetAnalysis()
       telemetryRecordingId = createTelemetryId()
       recordingCompletionTracked = false
       startedAt = Date.now()
-      await recordingAudioEncoder.start()
+      practiceStatisticsRecorded = false
+      startStage = 'startRecorder'
       await startRecorder()
       currentRecordingName = ''
+      startStage = 'keepScreenAwakeWhileRecording'
       await keepScreenAwakeWhileRecording()
       trackTelemetry(TELEMETRY_EVENT.RECORDING_STARTED, {
         sourcePage: 'record',
         recordingId: telemetryRecordingId
       })
       uni.showToast({ title: t('record.durationLimitNotice'), icon: 'none', duration: 2500 })
-    } catch {
-      recordingAudioEncoder.discard()
+    } catch (error) {
+      console.error('[录音错误] 自由录音启动流程失败', {
+        stage: startStage,
+        rawError: error
+      })
       uni.showModal({
         title: t('record.microphonePermissionTitle'),
         content: t('record.recordingStartFailed'),
@@ -555,11 +556,18 @@ async function toggleRecording() {
       return
     }
   } else {
+    console.info('[录音诊断] 自由练声从暂停或回放切回继续录音', {
+      ...playbackStateBeforeRecordingAction
+    })
+    invalidatePausedPreview()
     pausedDuration += Date.now() - pauseStartedAt
-    stopPlayback()
-    deleteTemporaryAudio(previewAudioPath)
+    retirePreviewAudio(
+      previewAudioPath,
+      playbackStateBeforeRecordingAction.loadedPreviewPath === previewAudioPath
+    )
     previewAudioPath = ''
     playablePath.value = ''
+    pitchAnalysis.initWorker()
     setViewportTarget(lastDetectedMidi)
     draw()
     resumeRecorder()
@@ -578,95 +586,47 @@ async function toggleRecording() {
   startRenderTimer()
 }
 
-function handleFrame(buffer: ArrayBuffer | Float32Array, sourceSampleRate = SAMPLE_RATE) {
-  const nativeWebFrame = buffer instanceof Float32Array
-  if (recorderCapabilities.capturesPcmFrames) {
-    if (!(buffer instanceof ArrayBuffer)) return
-    recordedPcmByteLength += buffer.byteLength
-    if (recordingAudioEncoder.needsFallbackPcm()) appendPcm(buffer)
-    recordingClockPosition = recordedPcmByteLength / (SAMPLE_RATE * 2)
-    recordingClockAt = Date.now()
-    if (pitchWorker) {
-      try {
-        pitchWorker.postMessage({
-          type: 'analyze',
-          buffer,
-          sampleRate: sourceSampleRate,
-          time: currentElapsed()
-        })
-      } catch {
-        disablePitchWorker()
-      }
-      return
-    }
-  }
-  const analysisNow = Date.now()
-  const minimumAnalysisInterval = pitchWorker
-    ? WORKER_ANALYSIS_INTERVAL_MS
-    : DIRECT_ANALYSIS_INTERVAL_MS
-  if (!nativeWebFrame && analysisNow - lastAnalysisAt < minimumAnalysisInterval) return
-
-  if (pitchWorker) {
-    if (workerBusy) return
-    lastAnalysisAt = analysisNow
-    workerBusy = true
-    try {
-      pitchWorker.postMessage({
-        type: 'analyze',
-        buffer,
-        sampleRate: sourceSampleRate,
-        time: currentElapsed()
+async function pauseActiveRecording(trackPause: boolean) {
+  if (!isRecording.value) return
+  if (recorderCapabilities.pause) {
+    const diagnosticPauseStartedAt = Date.now()
+    console.info('[录音诊断] 自由练声开始暂停')
+    elapsed = Math.max(elapsed, currentElapsed())
+    pauseRecorder()
+    void releaseRecordingScreenAwake()
+    pauseStartedAt = Date.now()
+    isRecording.value = false
+    playbackPosition.value = elapsed
+    playbackHasStarted = false
+    hasManualSeek = false
+    clearTimer()
+    clearRenderTimer()
+    updateClock()
+    draw()
+    await refreshPausedPlayback()
+    console.info('[录音诊断] 自由练声暂停全部完成', {
+      elapsedMs: Date.now() - diagnosticPauseStartedAt
+    })
+    if (trackPause) {
+      trackTelemetry(TELEMETRY_EVENT.RECORDING_PAUSED, {
+        sourcePage: 'record',
+        recordingId: telemetryRecordingId,
+        durationSeconds: elapsed
       })
-    } catch {
-      workerBusy = false
     }
     return
   }
-
-  if (sourceSampleRate !== engineSampleRate) {
-    engineSampleRate = sourceSampleRate
-    engine = new PitchEngine({
-      sampleRate: engineSampleRate,
-      bufferSize: BUFFER_SIZE,
-      fallbackDetector: fallbackPitchDetector,
-      primaryDetector: primaryPitchDetector
-    })
-    accumulator.reset()
-  }
-
-  const samples = buffer instanceof Float32Array ? buffer : pcm16ToFloat32(buffer)
-  accumulator.push(samples, (frame: Float32Array) => {
-    sampleCount += frame.length
-    const frameNow = Date.now()
-    if (!nativeWebFrame && frameNow - lastAnalysisAt < 90) return
-    lastAnalysisAt = frameNow
-    elapsed = currentElapsed()
-    const result = engine.analyze(frame, elapsed)
-    if (result) handlePitchResult(result)
-  })
+  pendingAction = 'stop'
+  isRecording.value = false
+  elapsed = Math.max(elapsed, (Date.now() - startedAt - pausedDuration) / 1000)
+  clearTimer()
+  clearRenderTimer()
+  void releaseRecordingScreenAwake()
+  stopRecorder()
 }
 
-function handlePitchResult(result: {
-  time: number
-  frequency?: number | null
-  midi: number | null
-  confidence: number
-  voiced: boolean
-}) {
-  elapsed = Math.max(elapsed, result.time)
-  const last = points[points.length - 1]
-  if (result.voiced && result.midi !== null) {
-    unvoicedFrames = 0
-    points.push({ time: result.time, midi: result.midi, confidence: result.confidence })
-    lastDetectedMidi = result.midi
-    followRecordedPitch(result.midi)
-    return
-  }
-
-  unvoicedFrames += 1
-  if (unvoicedFrames === 4 && (!last || last.midi !== null)) {
-    points.push({ time: result.time, midi: null, confidence: 0 })
-  }
+function handleFrame(buffer: ArrayBuffer | Float32Array, sourceSampleRate = SAMPLE_RATE) {
+  pitchAnalysis.analyze(buffer, sourceSampleRate)
 }
 
 function followRecordedPitch(midi: number) {
@@ -685,20 +645,27 @@ async function handleStop(result: { tempFilePath: string; blob?: Blob }) {
   if (discardStop) {
     discardStop = false
     deleteTemporaryAudio(result.tempFilePath)
-    recordingAudioEncoder.discard()
     resetPcm()
     recordedPcmByteLength = 0
     return
   }
-  const completedAudioPath = await recordingAudioEncoder.finalize(result.tempFilePath)
-  tempFilePath = completedAudioPath
+  let completedAudioPath = ''
+  if (
+    recorderCapabilities.capturesPcmFrames &&
+    pcmBuffer.byteLength > 0 &&
+    pcmBuffer.byteLength === recordedPcmByteLength
+  ) {
+    completedAudioPath = await createPcmPreview(pcmChunks(), pcmBuffer.byteLength)
+    deleteTemporaryAudio(result.tempFilePath)
+  }
+  tempFilePath = completedAudioPath || result.tempFilePath
   tempBlob = result.blob
   playablePath.value =
-    recorderCapabilities.capturesPcmFrames && completedAudioPath.toLowerCase().endsWith('.mp3')
-      ? completedAudioPath
+    recorderCapabilities.capturesPcmFrames
+      ? tempFilePath
       : recorderCapabilities.realtimeFrames
         ? ''
-        : completedAudioPath
+        : tempFilePath
   isRecording.value = false
   clearTimer()
   clearRenderTimer()
@@ -724,6 +691,21 @@ async function handleStop(result: { tempFilePath: string; blob?: Blob }) {
       sourcePage: 'record',
       recordingId: telemetryRecordingId,
       durationSeconds: elapsed
+    })
+  }
+  if (!recordingDetailMode.value && !practiceStatisticsRecorded && elapsed >= 1) {
+    practiceStatisticsRecorded = true
+    void recordCompletedPractice({
+      clientEventId: createPracticeEventId(),
+      exerciseKey: 'free-practice',
+      durationSeconds: elapsed,
+      startedAt: new Date(startedAt).toISOString(),
+      endedAt: new Date().toISOString(),
+      title: t('practiceStats.freePractice'),
+      primaryCategoryKey: 'natural',
+      primaryCategoryName: t('practice.categories.natural')
+    }).catch(() => {
+      // 事件已经保存在本地，网络恢复或登录后继续同步。
     })
   }
   if (pendingAction === 'save') await persistCurrentRecording()
@@ -757,6 +739,7 @@ async function persistCurrentRecording() {
         id,
         name: recordingName,
         duration: elapsed,
+        audioOffset: 0,
         createdAt: date.toISOString(),
         pointCount: points.length,
         points: [...points],
@@ -764,7 +747,6 @@ async function persistCurrentRecording() {
       }
     })
     deleteTemporaryAudio(sourceTempFilePath)
-    recordingAudioEncoder.release(sourceTempFilePath)
     deleteTemporaryAudio(previewAudioPath)
     previewAudioPath = ''
     playablePath.value = await getPlaybackSource(stored)
@@ -801,6 +783,7 @@ async function persistCurrentRecording() {
 }
 
 async function clearRecording() {
+  invalidatePausedPreview()
   void releaseRecordingScreenAwake()
   stopPlayback()
   clearTimer()
@@ -821,22 +804,17 @@ async function clearRecording() {
   currentRecordingName = ''
   deleteTemporaryAudio(previewAudioPath)
   previewAudioPath = ''
-  recordingAudioEncoder.discard()
   timeLabel.value = '00:00'
   draw()
 }
 
 function resetAnalysis() {
-  points.splice(0)
   elapsed = 0
   playbackPosition.value = 0
   playbackHasStarted = false
   hasManualSeek = false
   recordingClockPosition = 0
   recordingClockAt = 0
-  sampleCount = 0
-  lastAnalysisAt = 0
-  unvoicedFrames = 0
   pausedDuration = 0
   durationWarningShown = false
   durationLimitHandled = false
@@ -844,64 +822,44 @@ function resetAnalysis() {
   viewportTargetMidi = 60
   viewportAnimationAt = 0
   lastDetectedMidi = 60
-  engine.reset()
-  accumulator.reset()
-  workerBusy = false
-  pitchWorker?.postMessage?.({ type: 'reset' })
-  recordingAudioEncoder.discard()
+  pitchAnalysis.reset()
   resetPcm()
   recordedPcmByteLength = 0
 }
 
-function appendPcm(buffer: ArrayBuffer) {
-  const source = new Uint8Array(buffer)
-  let sourceOffset = 0
-  while (sourceOffset < source.length) {
-    const writable = Math.min(source.length - sourceOffset, PCM_BLOCK_SIZE - pcmBlockOffset)
-    pcmBlock.set(source.subarray(sourceOffset, sourceOffset + writable), pcmBlockOffset)
-    pcmBlockOffset += writable
-    pcmByteLength += writable
-    sourceOffset += writable
-    if (pcmBlockOffset === PCM_BLOCK_SIZE) {
-      pcmBlocks.push(pcmBlock)
-      pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
-      pcmBlockOffset = 0
-    }
-  }
-}
-
 function resetPcm() {
-  pcmBlocks = []
-  pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
-  pcmBlockOffset = 0
-  pcmByteLength = 0
+  pcmBuffer.reset()
 }
 
 function pcmChunks() {
-  return pcmBlockOffset > 0 ? [...pcmBlocks, pcmBlock.subarray(0, pcmBlockOffset)] : pcmBlocks
+  return pcmBuffer.chunks()
 }
 
 async function refreshPausedPlayback() {
+  const requestId = ++pausedPreviewRequestId
   try {
-    const encodedPreviewPath = await recordingAudioEncoder.createPreview()
-    if (encodedPreviewPath) {
-      deleteTemporaryAudio(previewAudioPath)
-      previewAudioPath = encodedPreviewPath
-      playablePath.value = encodedPreviewPath
-      return
-    }
     const preview = recorderCapabilities.capturesPcmFrames
-      ? pcmByteLength > 0 && pcmByteLength === recordedPcmByteLength
-        ? { tempFilePath: await createPcmPreview(pcmChunks(), pcmByteLength) }
+      ? pcmBuffer.byteLength > 0 && pcmBuffer.byteLength === recordedPcmByteLength
+        ? { tempFilePath: await createPcmPreview(pcmChunks(), pcmBuffer.byteLength) }
         : null
       : await createPausedRecorderPreview()
     if (!preview) throw new Error('paused preview unavailable')
+    if (requestId !== pausedPreviewRequestId || isRecording.value) {
+      deleteTemporaryAudio(preview.tempFilePath)
+      console.info('[录音诊断] 丢弃已经过期的自由练声暂停预览', { requestId })
+      return
+    }
     deleteTemporaryAudio(previewAudioPath)
     previewAudioPath = preview.tempFilePath
     playablePath.value = preview.tempFilePath
   } catch {
+    if (requestId !== pausedPreviewRequestId || isRecording.value) return
     uni.showToast({ title: t('record.previewFailed'), icon: 'none' })
   }
+}
+
+function invalidatePausedPreview() {
+  pausedPreviewRequestId += 1
 }
 
 async function togglePlayback() {
@@ -935,16 +893,16 @@ async function togglePlayback() {
   if (canReuseLoadedSource) {
     const position = playbackPosition.value
     pendingPlayerSeek = null
-    if (position <= 0.01) startPreparedPlayback(position)
+    if (playbackTimeToSourceTime(position) <= 0.01) startPreparedPlayback(position)
     else {
       awaitingPlayerSeek = position
-      player.seek(position)
+      player.seek(playbackTimeToSourceTime(position))
     }
     return
   }
   player.src = playablePath.value
   markRecordingPlaybackSourceLoaded(playbackSourceSession, playablePath.value)
-  ;(player as any).startTime = playbackPosition.value
+  ;(player as any).startTime = playbackTimeToSourceTime(playbackPosition.value)
   // 已准备好的本地预览不一定触发 canplay，直接开始并让其在内部完成加载，
   // 否则第一次点击只会设置 src，第二次点击才真正播放。
   pendingPlayerSeek = null
@@ -959,11 +917,26 @@ function stopPlayback() {
   playbackStarting = false
   isPlaying.value = false
   if (playbackSourceSession.loadedSourcePath) {
+    const stopStartedAt = Date.now()
     ignoreEndedBefore = Date.now() + 500
     player.stop()
+    invalidateRecordingPlaybackSource(playbackSourceSession)
+    console.info('[录音诊断] 自由练声播放器停止完成', {
+      elapsedMs: Date.now() - stopStartedAt
+    })
   }
   clearTimer()
   clearRenderTimer()
+}
+
+function retirePreviewAudio(filePath: string, waitForNativePlayer: boolean) {
+  if (!filePath) return
+  if (!waitForNativePlayer) {
+    deleteTemporaryAudio(filePath)
+    return
+  }
+  // 微信原生播放器的 stop() 返回早于底层文件句柄释放，立即 unlink 会阻塞音频线程。
+  setTimeout(() => deleteTemporaryAudio(filePath), 500)
 }
 
 function pausePlayback() {
@@ -981,7 +954,7 @@ function pausePlayback() {
 function syncPlaybackPosition() {
   if (externalActionPlaybackPosition !== null) return
   if (!isPlaying.value || pendingPlayerSeek !== null) return
-  const currentTime = Number((player as any).currentTime)
+  const currentTime = sourceTimeToPlaybackTime(Number((player as any).currentTime))
   if (!Number.isFinite(currentTime)) return
   if (awaitingPlayerSeek !== null) {
     if (Math.abs(currentTime - awaitingPlayerSeek) > 0.35) return
@@ -1007,6 +980,14 @@ function startPreparedPlayback(position: number) {
 function currentPlaybackPosition() {
   if (!isPlaying.value) return playbackPosition.value
   return clamp(playbackAnchorPosition + (Date.now() - playbackAnchorAt) / 1000, 0, elapsed)
+}
+
+function playbackTimeToSourceTime(position: number) {
+  return Math.max(0, position + playbackAudioOffset)
+}
+
+function sourceTimeToPlaybackTime(position: number) {
+  return Number.isFinite(position) ? Math.max(0, position - playbackAudioOffset) : position
 }
 
 function animatePlaybackPosition(target: number) {
@@ -1106,6 +1087,7 @@ function getDragPointer(event: any) {
 
 async function downloadRecording() {
   if (!playablePath.value) return
+  const sourcePath = playablePath.value
   let heldPlaybackPosition: number | null = null
   trackTelemetry(TELEMETRY_EVENT.RECORDING_SHARE_CLICKED, {
     sourcePage: 'record',
@@ -1113,10 +1095,16 @@ async function downloadRecording() {
     durationSeconds: elapsed
   })
   try {
-    const recordingName = await resolveCurrentRecordingName()
+    const exportKey = sourcePath
+    const exportPrepared = audioExportSession.isPrepared(exportKey)
+    const recordingName = exportPrepared
+      ? currentRecordingName || defaultRecordingName.value
+      : await resolveCurrentRecordingName()
     heldPlaybackPosition = holdPlaybackForExternalAction()
-    const result = await exportAudio({
-      filePath: playablePath.value,
+    if (!exportPrepared) await pitchAnalysis.releaseWorkerSlot()
+    const result = await audioExportSession.run({
+      key: exportKey,
+      filePath: sourcePath,
       name: recordingName
     })
     if (result === 'cancelled') return
@@ -1125,7 +1113,8 @@ async function downloadRecording() {
       recordingId: telemetryRecordingId,
       durationSeconds: elapsed
     })
-  } catch {
+  } catch (error) {
+    console.error('[音频导出] 自由练声分享失败', error)
     trackTelemetry(TELEMETRY_EVENT.RECORDING_SHARE_FAILED, {
       sourcePage: 'record',
       recordingId: telemetryRecordingId,
@@ -1140,7 +1129,7 @@ async function downloadRecording() {
 
 function holdPlaybackForExternalAction() {
   const predictedPosition = currentPlaybackPosition()
-  const playerPosition = Number((player as any).currentTime)
+  const playerPosition = sourceTimeToPlaybackTime(Number((player as any).currentTime))
   const position =
     Number.isFinite(playerPosition) && Math.abs(playerPosition - predictedPosition) < 0.5
       ? clamp(playerPosition, 0, elapsed)
@@ -1255,6 +1244,7 @@ function clearTimer() {
 function startRenderTimer() {
   clearRenderTimer()
   clearViewportAnimationTimer()
+  visualClock.reset(isRecording.value ? currentRecordingPosition() : currentPlaybackPosition())
   renderTimer = setInterval(draw, activeRenderInterval())
 }
 
@@ -1313,7 +1303,7 @@ function ensureViewportAnimationTimer() {
 
 function activeRenderInterval() {
   if (recorderCapabilities.capturesPcmFrames) return PCM_RENDER_INTERVAL_MS
-  return directCanvas ? DIRECT_RENDER_INTERVAL_MS : LEGACY_CANVAS_RENDER_INTERVAL_MS
+  return directCanvas ? DIRECT_RENDER_INTERVAL_MS : COMMAND_CANVAS_RENDER_INTERVAL_MS
 }
 
 function clearViewportAnimationTimer() {
@@ -1347,10 +1337,16 @@ function findLastVoicedPoint() {
 }
 
 function draw() {
-  const cursorTime = isRecording.value
-    ? Math.max(0, currentRecordingPosition() - CURVE_RENDER_DELAY_SECONDS)
-    : currentPlaybackPosition()
-  if (isPlaying.value || isRecording.value || dragMode === 'time') {
+  const targetCursorTime = isRecording.value
+    ? Math.max(0, currentRecordingPosition() - LIVE_PITCH_RENDER_DELAY_SECONDS)
+    : isPlaying.value
+      ? Math.max(0, currentPlaybackPosition() - PLAYBACK_OUTPUT_DELAY_SECONDS)
+      : currentPlaybackPosition()
+  const cursorTime =
+    dragMode === 'time'
+      ? visualClock.reset(targetCursorTime)
+      : visualClock.update(targetCursorTime, isRecording.value || isPlaying.value)
+  if (isRecording.value || dragMode === 'time') {
     const cursorMidi = pitchAtTime(cursorTime)
     if (cursorMidi !== null) followViewportToPitch(cursorMidi)
   }
@@ -1383,50 +1379,24 @@ function drawCanvas(cursorTime: number) {
     maximumMidi: MAX_MIDI
   }
   drawPitchGrid(pitchLayer)
-  const playheadX = plotWidth * PLAYHEAD_RATIO
+  const playheadX = plotWidth * LIVE_PITCH_PLAYHEAD_RATIO
   const startTime = cursorTime - playheadX / PIXELS_PER_SECOND
-  const commands = createCurveCommands(points, {
+  const endTime = startTime + plotWidth / PIXELS_PER_SECOND
+  drawLivePitchCurve({
+    context: ctx,
+    direct: directCanvas,
+    points,
     startTime,
+    endTime,
     width: plotWidth,
     pixelsPerSecond: PIXELS_PER_SECOND,
-    maxMidi: viewportMaxMidi,
-    rowHeight: ROW_HEIGHT
+    maximumMidi: viewportMaxMidi,
+    rowHeight: ROW_HEIGHT,
+    showLatestPoint: isRecording.value,
+    liveTime: isRecording.value ? cursorTime : undefined
   })
-  if (directCanvas) {
-    ctx.lineWidth = 3
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.strokeStyle = '#4b806f'
-  } else {
-    ctx.setLineWidth(3)
-    ctx.setLineCap('round')
-    ctx.setLineJoin('round')
-    ctx.setStrokeStyle('#4b806f')
-  }
-  ctx.beginPath()
-  for (const command of commands) {
-    if (command.type === 'move') ctx.moveTo(command.x, command.y)
-    else if (command.type === 'quad')
-      ctx.quadraticCurveTo(command.cx, command.cy, command.x, command.y)
-    else if (command.type === 'line') ctx.lineTo(command.x, command.y)
-    else {
-      ctx.stroke()
-      ctx.beginPath()
-    }
-  }
-  ctx.stroke()
 
-  if (directCanvas) {
-    ctx.lineWidth = 2
-    ctx.strokeStyle = '#1f5e4c'
-  } else {
-    ctx.setLineWidth(2)
-    ctx.setStrokeStyle('#1f5e4c')
-  }
-  ctx.beginPath()
-  ctx.moveTo(playheadX, 0)
-  ctx.lineTo(playheadX, height)
-  ctx.stroke()
+  drawLivePitchPlayhead({ context: ctx, direct: directCanvas, x: playheadX, height })
   // 将音高轴保持为画布最上层，避免曲线或播放头覆盖、清除右侧 C1-C8 标签。
   drawPitchAxis(pitchLayer)
   commitCanvas()
@@ -1489,26 +1459,6 @@ function clampViewportCenter(value: number) {
   display: block;
   background: transparent;
 }
-.page-mode {
-  position: absolute;
-  z-index: 4;
-  top: 18rpx;
-  left: 24rpx;
-  display: flex;
-  min-width: 112rpx;
-  height: 58rpx;
-  align-items: center;
-  justify-content: center;
-  padding: 0 18rpx;
-  border: 1px solid #c9ddd5;
-  border-radius: 999rpx;
-  box-sizing: border-box;
-  color: #356b5b;
-  background: rgba(255, 255, 255, 0.94);
-  font-size: 23rpx;
-  font-weight: 700;
-}
-
 .time-bar {
   display: flex;
   flex: 0 0 38rpx;

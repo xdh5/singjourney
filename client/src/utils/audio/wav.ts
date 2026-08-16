@@ -8,6 +8,20 @@ export function wrapPcmChunksAsWav(
   sampleRate: number
 ) {
   const wav = new ArrayBuffer(44 + pcmByteLength)
+  new Uint8Array(wav).set(new Uint8Array(createPcmWavHeader(pcmByteLength, sampleRate)))
+  const output = new Uint8Array(wav, 44)
+  let offset = 0
+  for (const chunk of chunks) {
+    if (offset >= pcmByteLength) break
+    const available = Math.min(chunk.byteLength, pcmByteLength - offset)
+    output.set(chunk.subarray(0, available), offset)
+    offset += available
+  }
+  return wav
+}
+
+export function createPcmWavHeader(pcmByteLength: number, sampleRate: number) {
+  const wav = new ArrayBuffer(44)
   const view = new DataView(wav)
   writeAscii(view, 0, 'RIFF')
   view.setUint32(4, 36 + pcmByteLength, true)
@@ -22,14 +36,6 @@ export function wrapPcmChunksAsWav(
   view.setUint16(34, 16, true)
   writeAscii(view, 36, 'data')
   view.setUint32(40, pcmByteLength, true)
-  const output = new Uint8Array(wav, 44)
-  let offset = 0
-  for (const chunk of chunks) {
-    if (offset >= pcmByteLength) break
-    const available = Math.min(chunk.byteLength, pcmByteLength - offset)
-    output.set(chunk.subarray(0, available), offset)
-    offset += available
-  }
   return wav
 }
 

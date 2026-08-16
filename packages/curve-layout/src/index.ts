@@ -11,6 +11,8 @@ export type CurveViewport = {
   pixelsPerSecond: number
   maxMidi: number
   rowHeight: number
+  /** 仅覆盖最后一个点的显示音高，不修改原始数据。 */
+  lastPointMidi?: number | null
 }
 
 export function midiToY(midi: number, maxMidi: number, rowHeight: number) {
@@ -49,14 +51,18 @@ export function createCurveCommands(points: CurvePoint[], viewport: CurveViewpor
   for (let index = startIndex; index < points.length; index += 1) {
     const point = points[index]
     if (point.time > endTime) break
-    if (point.midi === null) {
+    const midi =
+      index === points.length - 1 && viewport.lastPointMidi !== undefined
+        ? viewport.lastPointMidi
+        : point.midi
+    if (midi === null) {
       flushSegment()
       if (commands.length > 0 && commands[commands.length - 1].type !== 'gap') commands.push({ type: 'gap' })
       continue
     }
     segment.push({
       x: (point.time - viewport.startTime) * viewport.pixelsPerSecond,
-      y: midiToY(point.midi, viewport.maxMidi, viewport.rowHeight)
+      y: midiToY(midi, viewport.maxMidi, viewport.rowHeight)
     })
   }
   flushSegment()

@@ -1,4 +1,3 @@
-import json
 import subprocess
 from pathlib import Path
 
@@ -14,24 +13,19 @@ from app.modules.practice.constants import (
     PIANO_CUE_DURATION_BEATS,
     PIANO_NOTE_DURATION_BEATS,
     RENDER_SAMPLE_RATE,
+    master_accompaniment_filename,
 )
 from app.modules.practice.score import PracticeScore
 
 
 def render_practice_score(score: PracticeScore, output_directory: Path, soundfont: Path) -> None:
-    """Render a score to MIDI, mono Opus and its matching target manifest.
-
-    FluidSynth and FFmpeg are intentionally invoked as pinned Docker build tools.
-    They are not used on each playback request. A failure aborts the build so an
-    audio file can never be published with a stale target curve.
-    """
+    """在 Docker 构建阶段把乐谱渲染为按内容寻址的单声道 Opus。"""
 
     output_directory.mkdir(parents=True, exist_ok=True)
-    stem = f"{score.exercise_key}-v{score.version}-master"
+    stem = Path(master_accompaniment_filename(score.exercise_key)).stem
     midi_path = output_directory / f"{stem}.mid"
     wav_path = output_directory / f"{stem}.wav"
     opus_path = output_directory / f"{stem}.opus"
-    manifest_path = output_directory / f"{stem}.json"
 
     _write_midi(score, midi_path)
     subprocess.run([
@@ -45,10 +39,6 @@ def render_practice_score(score: PracticeScore, output_directory: Path, soundfon
         "-ac", "1", "-c:a", "libopus", "-b:a", OPUS_BITRATE,
         "-vbr", "on", "-application", "audio", str(opus_path),
     ], check=True)
-    manifest_path.write_text(
-        json.dumps(score.manifest(f"/static/practice/{opus_path.name}"), ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
     midi_path.unlink()
     wav_path.unlink()
 

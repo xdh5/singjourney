@@ -152,8 +152,8 @@ def post_practice_session(
     response_model=PracticeStatisticsResponse,
     summary="Read the authenticated user's real practice statistics",
     description=(
-        "Returns today's totals, all-time totals, the latest 20 weeks of daily activity, and today's exercise "
-        "breakdown. Dates are calculated using the supplied browser/phone timezone offset. This endpoint is "
+        "Returns the current week's daily activity, category mix and ranking together with lifetime history. "
+        "Dates are calculated using the supplied browser/phone timezone offset. This endpoint is "
         "read-only and returns metadata only; recordings and pitch curves are never included."
     ),
     responses={

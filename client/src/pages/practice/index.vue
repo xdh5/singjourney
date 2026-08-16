@@ -6,7 +6,9 @@
   <practice-session
     v-if="activeManifest"
     :manifest="activeManifest"
-    @close="activeManifest = null"
+    :exercise-title="activeExerciseTitle"
+    :include-accompaniment-on-replay="headphonesConnected"
+    @close="closePracticeSession"
     @completed="saveCompletedPractice"
   />
   <view
@@ -22,7 +24,9 @@
 
     <voice-selector
       :selected="selectedVoice"
+      :headphones-connected="headphonesConnected"
       @change="selectVoice"
+      @headphones-change="selectHeadphonesMode"
     />
     <scroll-view
       class="category-scroll"
@@ -38,17 +42,21 @@
           role="button"
           @tap="selectCategory(category.key)"
         >
-          <text
-            v-if="category.key === 'favorites'"
-            class="favorite-chip-icon"
-            >☆</text
-          >
           {{ category.name }}
         </view>
       </view>
     </scroll-view>
 
-    <view class="exercise-list">
+    <view
+      v-if="listLoading"
+      class="list-loading"
+    >
+      <uni-load-more status="loading" />
+    </view>
+    <view
+      v-else
+      class="exercise-list"
+    >
       <exercise-card
         v-for="exercise in visibleExercises"
         :key="exercise.id"
@@ -81,7 +89,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import PageHeading from '../../components/page-heading.vue'
@@ -98,38 +106,121 @@ import {
 import { fetchPracticeManifest, type VoicePreset } from '../../services/practice/catalog'
 import { usePracticeCatalogStore } from '../../stores/practice-catalog'
 import { usePracticeFavoritesStore } from '../../stores/practice-favorites'
+import { useAuthenticationStore } from '../../stores/authentication'
+import { configureHeadphonesAudioMode } from '../../utils/audio/player'
+import {
+  keepScreenAwakeWhilePageOpen,
+  releasePageScreenAwake
+} from '../../utils/recording/screen-awake'
+import {
+  isVoicePreset,
+  clearLocalVoicePreset,
+  readLocalVoicePreset,
+  readStoredLocalVoicePreset,
+  storeLocalVoicePreset
+} from '../../services/account/preferences'
 
 const { t } = useI18n()
 const catalogStore = usePracticeCatalogStore()
 const favoritesStore = usePracticeFavoritesStore()
-const { categories: catalogCategories, exercises } = storeToRefs(catalogStore)
-const { favoriteIds } = storeToRefs(favoritesStore)
+const authenticationStore = useAuthenticationStore()
+const {
+  categories: catalogCategories,
+  exercises,
+  loading: catalogLoading
+} = storeToRefs(catalogStore)
+const { favoriteIds, loading: favoritesLoading } = storeToRefs(favoritesStore)
+const { session } = storeToRefs(authenticationStore)
 const categories = computed(() => [
   { key: 'favorites', name: t('practice.categories.favorites') },
   ...catalogCategories.value
 ])
-const selectedVoice = ref<VoicePreset>('female')
+const selectedVoice = ref<VoicePreset>(
+  isVoicePreset(session.value?.user.preferred_voice_preset)
+    ? session.value.user.preferred_voice_preset
+    : readLocalVoicePreset()
+)
 const selectedCategory = ref('favorites')
+const headphonesConnected = ref(false)
 const activeManifest = ref<PracticeManifest | null>(null)
+const activeExerciseTitle = ref('')
+const PRACTICE_SCREEN_AWAKE_OWNER = 'practice-page'
+let voicePreferenceUpdate = Promise.resolve()
+let currentPageInstance: unknown
 
 const visibleExercises = computed(() =>
   selectedCategory.value === 'favorites'
     ? exercises.value.filter((exercise) => favoriteIds.value.includes(exercise.id))
     : exercises.value.filter((exercise) => exercise.category_keys.includes(selectedCategory.value))
 )
+const listLoading = computed(
+  () =>
+    catalogLoading.value ||
+    (selectedCategory.value === 'favorites' && favoritesLoading.value)
+)
+
+// setup 阶段立即发起请求，让首帧直接进入加载态，不先渲染“暂无收藏”。
+void catalogStore.refresh().catch(() => {})
 
 onShow(() => {
+  void keepScreenAwakeWhilePageOpen(PRACTICE_SCREEN_AWAKE_OWNER)
+  currentPageInstance = currentTopPage()
   setPageTitle('nav.practice')
+  const serverVoice = session.value?.user.preferred_voice_preset
+  if (isVoicePreset(serverVoice)) {
+    selectedVoice.value = serverVoice
+  }
   void catalogStore.refresh().catch(() => {})
   void favoritesStore.refresh()
 })
 
+onHide(() => {
+  const hiddenPage = currentPageInstance
+  setTimeout(() => {
+    if (currentTopPage() !== hiddenPage) resetPageSession()
+  }, 0)
+})
+onUnload(resetPageSession)
+
+function currentTopPage() {
+  const pages = getCurrentPages()
+  return pages[pages.length - 1]
+}
+
+function resetPageSession() {
+  void releasePageScreenAwake(PRACTICE_SCREEN_AWAKE_OWNER)
+  headphonesConnected.value = false
+  void configureHeadphonesAudioMode(false)
+  activeManifest.value = null
+  activeExerciseTitle.value = ''
+}
+
 function selectVoice(voice: VoicePreset) {
   selectedVoice.value = voice
+  storeLocalVoicePreset(voice)
+  if (!session.value) return
+  voicePreferenceUpdate = voicePreferenceUpdate
+    .then(() => authenticationStore.updateVoicePreference(voice))
+    .then(() => {
+      if (readStoredLocalVoicePreset() === voice) clearLocalVoicePreset()
+    })
+    .catch(() => undefined)
 }
 
 function selectCategory(category: string) {
   selectedCategory.value = category
+}
+
+function selectHeadphonesMode(connected: boolean) {
+  headphonesConnected.value = connected
+  void configureHeadphonesAudioMode(connected)
+  if (connected) {
+    void uni.showModal({
+      title: t('practice.headphonesDelayTitle'),
+      content: t('practice.headphonesDelayMessage'),
+      showCancel: false
+    })
+  }
 }
 
 function toggleFavorite(id: string) {
@@ -140,14 +231,31 @@ async function startExercise(id: string) {
   const exercise = exercises.value.find((item) => item.id === id)
   if (!exercise?.enabled) return
   try {
+    activeExerciseTitle.value = exercise.title
     activeManifest.value = await fetchPracticeManifest(id, selectedVoice.value)
   } catch {
+    activeExerciseTitle.value = ''
     uni.showToast({ title: t('practice.catalogLoadFailed'), icon: 'none' })
   }
 }
 
+function closePracticeSession() {
+  activeManifest.value = null
+  activeExerciseTitle.value = ''
+}
+
 function saveCompletedPractice(event: CompletedPracticeEvent) {
-  void recordCompletedPractice(event).catch(() => {
+  const exercise = exercises.value.find((item) => item.id === event.exerciseKey)
+  const primaryCategoryKey = exercise?.category_keys[0]
+  const primaryCategory = catalogCategories.value.find(
+    (category) => category.key === primaryCategoryKey
+  )
+  void recordCompletedPractice({
+    ...event,
+    title: exercise?.title,
+    primaryCategoryKey,
+    primaryCategoryName: primaryCategory?.name
+  }).catch(() => {
     // 事件保留在本地重试队列中，打开统计页时再次同步。
   })
 }
@@ -168,43 +276,48 @@ function saveCompletedPractice(event: CompletedPracticeEvent) {
 
 .category-scroll {
   width: calc(100% + 56rpx);
-  margin: 28rpx -28rpx 0;
+  margin: 24rpx -28rpx 0;
   white-space: nowrap;
 }
 .category-row {
   display: inline-flex;
-  gap: 12rpx;
+  gap: 30rpx;
   padding: 0 28rpx;
 }
 .category-chip {
+  position: relative;
   display: inline-flex;
-  height: 62rpx;
+  height: 58rpx;
   align-items: center;
-  padding: 0 25rpx;
-  border: 1px solid #b4d1c7;
-  border-radius: 999rpx;
-  color: #315f51;
-  background: #fff;
-  font-size: 23rpx;
+  padding: 0 4rpx;
+  border: 0;
+  color: #3f514b;
+  background: transparent;
+  font-size: 26rpx;
   font-weight: 600;
 }
-.favorite-chip-icon {
-  margin-right: 8rpx;
-  font-size: 29rpx;
-  font-weight: 400;
-  line-height: 1;
-}
 .category-chip.active {
-  border-color: #356b5b;
-  color: #fff;
-  background: #356b5b;
+  color: #147b59;
+}
+.category-chip.active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 4rpx;
+  border-radius: 999rpx;
+  background: #1f9a6d;
+  content: '';
 }
 
 .exercise-list {
   display: flex;
   flex-direction: column;
   gap: 18rpx;
-  margin-top: 28rpx;
+  margin-top: 22rpx;
+}
+.list-loading {
+  padding: 86rpx 24rpx;
 }
 .empty-state {
   display: flex;

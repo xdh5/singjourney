@@ -100,7 +100,7 @@ export class PitchEngine {
 
     const midi = frequencyToMidi(frequency)
     if (this.lastMidi !== null && Math.abs(midi - this.lastMidi) > this.config.maxMidiJump) {
-      return this.release(time, false)
+      return this.release(time)
     }
 
     this.missedFrames = 0
@@ -112,7 +112,7 @@ export class PitchEngine {
     return { time, frequency, midi: smoothedMidi, confidence, voiced: true }
   }
 
-  private release(time: number, emitGap = true): PitchPoint {
+  private release(time: number): PitchPoint {
     this.missedFrames += 1
     if (this.missedFrames >= this.config.releaseFrames) this.lastMidi = null
     return {

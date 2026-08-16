@@ -12,11 +12,12 @@ export type Recording = {
   id: string
   name: string
   duration: number
+  audioOffset: number
   audioPath: string
   createdAt: string
   pointCount: number
   points: StoredPitchPoint[]
-  recordingType?: RecordingType
+  recordingType: RecordingType
 }
 
 export const RECORDING_TYPE = {
@@ -29,15 +30,12 @@ export type RecordingType = (typeof RECORDING_TYPE)[keyof typeof RECORDING_TYPE]
 type StoredWebRecording = Recording & { audio: Blob }
 
 type LocalRecordingIndexEntry = Omit<Recording, 'points'>
-const LEGACY_STORAGE_KEY = 'singjourney-recordings-v2'
-const LEGACY_LOCAL_RECORDING_INDEX_KEY = 'singjourney-recordings-v3.index'
-const LOCAL_RECORDING_INDEX_KEY = 'singjourney-recordings-v4.index'
-const LOCAL_RECORDING_CURVE_KEY_PREFIX = 'singjourney-recordings-v3.curve.'
-const WEB_DATABASE_VERSION = 2
+const LOCAL_RECORDING_INDEX_KEY = 'singjourney-recordings.index'
+const LOCAL_RECORDING_CURVE_KEY_PREFIX = 'singjourney-recordings.curve.'
+const WEB_DATABASE_VERSION = 1
 const WEB_DB_NAME = 'singjourney-unified-recordings'
 const WEB_STORE = 'recordings'
 const RECORDING_SEQUENCE_SUFFIX = /\s+\((\d+)\)$/
-const LEGACY_RECORDING_TIMESTAMP_SUFFIX = /\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$/
 let webPlatform = false
 
 // #ifdef H5
@@ -131,10 +129,7 @@ export function formatTime(seconds: number) {
 }
 
 export function recordingBaseName(name: string, fallback: string) {
-  const normalized = name
-    .replace(RECORDING_SEQUENCE_SUFFIX, '')
-    .replace(LEGACY_RECORDING_TIMESTAMP_SUFFIX, '')
-    .trim()
+  const normalized = name.replace(RECORDING_SEQUENCE_SUFFIX, '').trim()
   return normalized || fallback
 }
 
@@ -153,8 +148,7 @@ export function nextRecordingName(
 ) {
   const matchingRecordings = recordings.filter((recording) => {
     if (recordingType) {
-      const storedType = recording.recordingType ?? RECORDING_TYPE.FREE_RECORDING
-      return storedType === recordingType
+      return recording.recordingType === recordingType
     }
     return recordingBaseName(recording.name, baseName) === baseName
   })
@@ -168,12 +162,10 @@ export function nextRecordingName(
 function openWebDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(WEB_DB_NAME, WEB_DATABASE_VERSION)
-    request.onupgradeneeded = (event) => {
+    request.onupgradeneeded = () => {
       const database = request.result
-      const store = database.objectStoreNames.contains(WEB_STORE)
-        ? request.transaction!.objectStore(WEB_STORE)
-        : database.createObjectStore(WEB_STORE, { keyPath: 'id' })
-      if ((event.oldVersion || 0) < WEB_DATABASE_VERSION) migrateWebRecordingNames(store)
+      if (!database.objectStoreNames.contains(WEB_STORE))
+        database.createObjectStore(WEB_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error || new Error('无法打开本地录音库'))
@@ -232,50 +224,7 @@ function transactionDone(transaction: IDBTransaction) {
 
 function readLocalRecordingIndex(): LocalRecordingIndexEntry[] {
   const stored = uni.getStorageSync(LOCAL_RECORDING_INDEX_KEY)
-  if (Array.isArray(stored)) return stored
-  const previousIndex = uni.getStorageSync(LEGACY_LOCAL_RECORDING_INDEX_KEY)
-  if (Array.isArray(previousIndex)) {
-    const migrated = previousIndex.map(migrateStoredRecordingName) as LocalRecordingIndexEntry[]
-    uni.setStorageSync(LOCAL_RECORDING_INDEX_KEY, migrated)
-    uni.removeStorageSync(LEGACY_LOCAL_RECORDING_INDEX_KEY)
-    return migrated
-  }
-  return migrateLegacyLocalRecordings()
-}
-
-function migrateLegacyLocalRecordings(): LocalRecordingIndexEntry[] {
-  const legacy = uni.getStorageSync(LEGACY_STORAGE_KEY)
-  if (!Array.isArray(legacy)) {
-    uni.setStorageSync(LOCAL_RECORDING_INDEX_KEY, [])
-    return []
-  }
-  const index = legacy.map((recording: Recording) => {
-    const points = Array.isArray(recording.points) ? recording.points : []
-    uni.setStorageSync(localRecordingCurveKey(recording.id), encodeRecordingCurve(points))
-    const { points: _points, ...entry } = recording
-    return migrateStoredRecordingName(entry) as LocalRecordingIndexEntry
-  })
-  uni.setStorageSync(LOCAL_RECORDING_INDEX_KEY, index)
-  uni.removeStorageSync(LEGACY_STORAGE_KEY)
-  return index
-}
-
-function migrateStoredRecordingName(recording: Record<string, unknown>) {
-  const legacyCustomName =
-    typeof recording.customName === 'string' ? recording.customName.trim() : ''
-  const storedName = typeof recording.name === 'string' ? recording.name.trim() : ''
-  const { customName: _legacyCustomName, ...current } = recording
-  return { ...current, name: legacyCustomName || storedName }
-}
-
-function migrateWebRecordingNames(store: IDBObjectStore) {
-  const request = store.openCursor()
-  request.onsuccess = () => {
-    const cursor = request.result
-    if (!cursor) return
-    cursor.update(migrateStoredRecordingName(cursor.value as Record<string, unknown>))
-    cursor.continue()
-  }
+  return Array.isArray(stored) ? stored : []
 }
 
 function readLocalRecordingCurve(id: string): StoredPitchPoint[] {

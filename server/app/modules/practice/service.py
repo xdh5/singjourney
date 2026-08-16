@@ -6,8 +6,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.practice.constants import (
-    PRACTICE_ACTIVITY_DAY_COUNT,
-    PRACTICE_ACTIVITY_WEEKS,
+    FREE_PRACTICE_CATEGORY_KEY,
+    FREE_PRACTICE_EXERCISE_KEY,
+    FREE_PRACTICE_MODE,
     PRACTICE_MODE_GUIDED,
 )
 from app.modules.practice.models import (
@@ -20,10 +21,15 @@ from app.modules.practice.models import (
 )
 from app.modules.practice.schemas import (
     PracticeActivityDay,
-    PracticeExerciseSummary,
+    PracticeCategorySummary,
+    PracticeLifetimeHistory,
+    PracticeLifetimeStatistics,
     PracticePeriodSummary,
+    PracticeRankingItem,
     PracticeSessionCreateRequest,
     PracticeStatisticsResponse,
+    PracticeWeekOverview,
+    PracticeWeekStatistics,
 )
 
 
@@ -137,7 +143,11 @@ def record_completed_practice(
         user_id=user_id,
         client_event_id=request.client_event_id,
         exercise_key=request.exercise_key,
-        mode=PRACTICE_MODE_GUIDED,
+        mode=(
+            FREE_PRACTICE_MODE
+            if request.exercise_key == FREE_PRACTICE_EXERCISE_KEY
+            else PRACTICE_MODE_GUIDED
+        ),
         duration_seconds=request.duration_seconds,
         started_at=request.started_at,
         ended_at=request.ended_at,
@@ -154,49 +164,47 @@ def read_practice_statistics(
     locale: str = "zh-Hans",
     now: datetime | None = None,
 ) -> PracticeStatisticsResponse:
-    """Aggregate all-time, local-day, per-exercise, and 20-week activity for one user."""
+    """Aggregate the current week and lifetime practice history for one user."""
     current_utc = _as_utc(now or datetime.now(timezone.utc))
     offset = timedelta(minutes=timezone_offset_minutes)
     local_today = (current_utc - offset).date()
-    local_start_date = local_today - timedelta(
-        days=local_today.weekday() + (PRACTICE_ACTIVITY_WEEKS - 1) * 7
-    )
-    activity_start_utc = _local_midnight_to_utc(local_start_date, offset)
+    week_start_date = local_today - timedelta(days=local_today.weekday())
+    week_start_utc = _local_midnight_to_utc(week_start_date, offset)
 
     total_sessions, total_duration = db.execute(
         select(func.count(PracticeSession.id), func.coalesce(func.sum(PracticeSession.duration_seconds), 0.0))
         .where(PracticeSession.user_id == user_id)
     ).one()
 
-    recent_sessions = db.execute(
+    week_sessions = db.execute(
         select(
             PracticeSession.started_at,
             PracticeSession.exercise_key,
             PracticeSession.duration_seconds,
         ).where(
             PracticeSession.user_id == user_id,
-            PracticeSession.started_at >= activity_start_utc,
+            PracticeSession.started_at >= week_start_utc,
         )
     ).all()
 
     daily: dict[date, list[float]] = defaultdict(lambda: [0, 0.0])
-    today_exercises: dict[str, list[float]] = defaultdict(lambda: [0, 0.0])
-    for started_at, exercise_key, duration_seconds in recent_sessions:
+    week_exercises: dict[str, list[float]] = defaultdict(lambda: [0, 0.0])
+    for started_at, exercise_key, duration_seconds in week_sessions:
         local_date = (_as_utc(started_at) - offset).date()
-        if local_date < local_start_date or local_date > local_today:
+        if local_date < week_start_date or local_date > local_today:
             continue
         daily[local_date][0] += 1
         daily[local_date][1] += float(duration_seconds)
-        if local_date == local_today and exercise_key:
-            today_exercises[exercise_key][0] += 1
-            today_exercises[exercise_key][1] += float(duration_seconds)
+        if exercise_key:
+            week_exercises[exercise_key][0] += 1
+            week_exercises[exercise_key][1] += float(duration_seconds)
 
     today_values = daily[local_today]
-    activity = []
-    for day_index in range(PRACTICE_ACTIVITY_DAY_COUNT):
-        activity_date = local_start_date + timedelta(days=day_index)
+    daily_activity = []
+    for day_index in range(7):
+        activity_date = week_start_date + timedelta(days=day_index)
         sessions, duration = daily[activity_date]
-        activity.append(
+        daily_activity.append(
             PracticeActivityDay(
                 date=activity_date,
                 sessions=int(sessions),
@@ -204,38 +212,159 @@ def read_practice_statistics(
             )
         )
 
+    all_exercise_rows = db.execute(
+        select(
+            PracticeSession.exercise_key,
+            func.count(PracticeSession.id),
+            func.coalesce(func.sum(PracticeSession.duration_seconds), 0.0),
+        )
+        .where(PracticeSession.user_id == user_id)
+        .group_by(PracticeSession.exercise_key)
+    ).all()
+    all_exercises = {
+        exercise_key: [int(sessions), float(duration)]
+        for exercise_key, sessions, duration in all_exercise_rows
+        if exercise_key
+    }
+
+    session_dates = sorted(
+        {
+            (_as_utc(started_at) - offset).date()
+            for started_at in db.scalars(
+                select(PracticeSession.started_at).where(PracticeSession.user_id == user_id)
+            ).all()
+        }
+    )
+
     use_english = locale.lower().startswith("en")
+    all_exercise_keys = set(week_exercises) | set(all_exercises)
     exercise_records = db.scalars(
-        select(PracticeExercise).where(PracticeExercise.id.in_(today_exercises.keys()))
+        select(PracticeExercise).where(PracticeExercise.id.in_(all_exercise_keys))
     ).all()
     exercise_titles = {
         exercise.id: exercise.title_en if use_english else exercise.title_zh_hans
         for exercise in exercise_records
     }
-    exercises = [
-        PracticeExerciseSummary(
+    exercise_titles[FREE_PRACTICE_EXERCISE_KEY] = "Free Practice" if use_english else "自由练声"
+
+    categories = db.scalars(
+        select(PracticeCategory)
+        .where(PracticeCategory.active.is_(True))
+        .order_by(PracticeCategory.sort_order, PracticeCategory.key)
+    ).all()
+    category_names = {
+        category.key: category.name_en if use_english else category.name_zh_hans
+        for category in categories
+    }
+    primary_category_by_exercise: dict[str, str] = {
+        FREE_PRACTICE_EXERCISE_KEY: FREE_PRACTICE_CATEGORY_KEY
+    }
+    category_rows = db.execute(
+        select(PracticeExerciseCategory.exercise_id, PracticeExerciseCategory.category_key)
+        .where(PracticeExerciseCategory.exercise_id.in_(all_exercise_keys))
+        .order_by(PracticeExerciseCategory.exercise_id, PracticeExerciseCategory.sort_order)
+    ).all()
+    for exercise_key, category_key in category_rows:
+        primary_category_by_exercise.setdefault(exercise_key, category_key)
+
+    week_duration = sum(values[1] for values in week_exercises.values())
+    week_session_count = sum(int(values[0]) for values in week_exercises.values())
+    practice_days = sum(1 for values in daily.values() if values[0] > 0)
+    return PracticeStatisticsResponse(
+        week=PracticeWeekStatistics(
+            today=PracticePeriodSummary(
+                sessions=int(today_values[0]),
+                duration_seconds=round(today_values[1], 3),
+            ),
+            overview=PracticeWeekOverview(
+                sessions=week_session_count,
+                duration_seconds=round(week_duration, 3),
+                practice_days=practice_days,
+                average_daily_seconds=round(week_duration / practice_days, 3)
+                if practice_days
+                else 0,
+            ),
+            daily_activity=daily_activity,
+            category_distribution=_category_summaries(
+                week_exercises,
+                primary_category_by_exercise,
+                category_names,
+            ),
+            top_exercises=_exercise_ranking(week_exercises, exercise_titles),
+        ),
+        lifetime=PracticeLifetimeStatistics(
+            history=PracticeLifetimeHistory(
+                sessions=int(total_sessions),
+                duration_seconds=round(float(total_duration), 3),
+                started_on=session_dates[0] if session_dates else None,
+                practice_days=len(session_dates),
+                longest_streak_days=_longest_streak(session_dates),
+            ),
+            category_distribution=_category_summaries(
+                all_exercises,
+                primary_category_by_exercise,
+                category_names,
+            ),
+            top_exercises=_exercise_ranking(all_exercises, exercise_titles),
+        ),
+    )
+
+
+def _exercise_ranking(
+    exercise_values: dict[str, list[float]],
+    exercise_titles: dict[str, str],
+) -> list[PracticeRankingItem]:
+    return [
+        PracticeRankingItem(
             exercise_key=exercise_key,
             title=exercise_titles.get(exercise_key, exercise_key),
             sessions=int(values[0]),
             duration_seconds=round(values[1], 3),
         )
         for exercise_key, values in sorted(
-            today_exercises.items(),
+            exercise_values.items(),
+            key=lambda item: (-item[1][0], -item[1][1], item[0]),
+        )[:5]
+    ]
+
+
+def _category_summaries(
+    exercise_values: dict[str, list[float]],
+    primary_category_by_exercise: dict[str, str],
+    category_names: dict[str, str],
+) -> list[PracticeCategorySummary]:
+    grouped: dict[str, list[float]] = defaultdict(lambda: [0, 0.0])
+    for exercise_key, values in exercise_values.items():
+        category_key = primary_category_by_exercise.get(exercise_key)
+        if not category_key:
+            continue
+        grouped[category_key][0] += values[0]
+        grouped[category_key][1] += values[1]
+    total_duration = sum(values[1] for values in grouped.values())
+    return [
+        PracticeCategorySummary(
+            category_key=category_key,
+            name=category_names.get(category_key, category_key),
+            sessions=int(values[0]),
+            duration_seconds=round(values[1], 3),
+            percentage=round(values[1] / total_duration * 100, 1) if total_duration else 0,
+        )
+        for category_key, values in sorted(
+            grouped.items(),
             key=lambda item: (-item[1][1], item[0]),
         )
     ]
-    return PracticeStatisticsResponse(
-        today=PracticePeriodSummary(
-            sessions=int(today_values[0]),
-            duration_seconds=round(today_values[1], 3),
-        ),
-        total=PracticePeriodSummary(
-            sessions=int(total_sessions),
-            duration_seconds=round(float(total_duration), 3),
-        ),
-        activity=activity,
-        today_exercises=exercises,
-    )
+
+
+def _longest_streak(dates: list[date]) -> int:
+    longest = 0
+    current = 0
+    previous: date | None = None
+    for practice_date in dates:
+        current = current + 1 if previous and practice_date == previous + timedelta(days=1) else 1
+        longest = max(longest, current)
+        previous = practice_date
+    return longest
 
 
 def _local_midnight_to_utc(local_date: date, offset: timedelta) -> datetime:

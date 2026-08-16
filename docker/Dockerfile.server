@@ -19,7 +19,14 @@ RUN curl --fail --location --retry 3 \
       "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/${GENERALUSER_COMMIT}/documentation/LICENSE.txt" \
       --output /opt/GeneralUser-GS-LICENSE.txt
 
-COPY server/app /workspace/app
+COPY server/app/__init__.py /workspace/app/__init__.py
+COPY server/app/jobs/__init__.py server/app/jobs/render_practice_assets.py /workspace/app/jobs/
+COPY server/app/modules/__init__.py /workspace/app/modules/__init__.py
+COPY server/app/modules/practice/__init__.py \
+     server/app/modules/practice/constants.py \
+     server/app/modules/practice/renderer.py \
+     server/app/modules/practice/score.py \
+     /workspace/app/modules/practice/
 RUN PYTHONPATH=/workspace python -m app.jobs.render_practice_assets \
       --output /practice-assets \
       --soundfont /opt/GeneralUser-GS.sf2
@@ -43,12 +50,10 @@ COPY server/pyproject.toml ./pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 COPY server/app ./app
-COPY server/migrations ./migrations
-COPY server/alembic.ini ./alembic.ini
 COPY --from=practice-assets /practice-assets ./practice-assets
 
 USER singjourney
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -9,7 +9,8 @@ export type PracticeTransportCallbacks = {
 type TransportMode = 'idle' | 'practice' | 'replay' | 'paused'
 type ActiveTransportMode = 'practice' | 'replay'
 
-const START_LEAD_SECONDS = 0.25
+const PRACTICE_START_LEAD_SECONDS = 0.25
+const REPLAY_START_LEAD_SECONDS = 0.04
 const CLOCK_POLL_INTERVAL_MS = 16
 const TARGET_VOICE_PEAK = 0.82
 const TARGET_ACTIVE_VOICE_RMS = 0.18
@@ -40,7 +41,11 @@ function createScheduledTransport() {
   let accompanimentSource: any = null
   let voiceSource: any = null
   let replayVoiceBuffer: any = null
+  let replayVoicePath = ''
+  let replayPreparation: Promise<void> | null = null
   let replayVoiceGain = MINIMUM_VOICE_GAIN
+  let replayVoiceOffset = 0
+  let replayIncludesAccompaniment = true
   let mode: TransportMode = 'idle'
   let scheduledAt = 0
   let pausedAt = 0
@@ -69,18 +74,28 @@ function createScheduledTransport() {
     callbacks = nextCallbacks
     mode = 'practice'
     pausedAt = offset
+    console.info('[录音诊断] 伴奏播放源开始调度', { offset })
     scheduleSources(false, offset)
   }
 
   async function startReplay(
     voicePath: string,
     nextCallbacks: PracticeTransportCallbacks,
-    endsAt?: number
+    endsAt?: number,
+    voiceOffset = 0,
+    includeAccompaniment = true
   ) {
     if (!accompanimentBuffer) throw new Error('practice accompaniment is not prepared')
-    const voiceBuffer = await decodeFile(audioContext, voicePath)
-    replayVoiceBuffer = voiceBuffer
-    replayVoiceGain = calculateVoiceGain(voiceBuffer)
+    const replayDecodeStartedAt = Date.now()
+    await prepareReplay(voicePath)
+    const voiceBuffer = replayVoiceBuffer
+    if (!voiceBuffer) throw new Error('practice replay is not prepared')
+    console.info('[录音诊断] 人声 WAV 解码完成', {
+      elapsedMs: Date.now() - replayDecodeStartedAt,
+      duration: voiceBuffer?.duration
+    })
+    replayVoiceOffset = Math.max(0, voiceOffset)
+    replayIncludesAccompaniment = includeAccompaniment
     stopSources()
     callbacks = nextCallbacks
     mode = 'replay'
@@ -89,36 +104,74 @@ function createScheduledTransport() {
       segmentDuration,
       endsAt ?? segmentDuration
     )
-    scheduleSources(true, 0, voiceBuffer, replayEndsAt)
+    scheduleSources(
+      true,
+      0,
+      voiceBuffer,
+      replayEndsAt,
+      replayVoiceOffset,
+      replayIncludesAccompaniment
+    )
+  }
+
+  async function prepareReplay(voicePath: string) {
+    if (replayVoiceBuffer && replayVoicePath === voicePath) return
+    if (replayPreparation && replayVoicePath === voicePath) return replayPreparation
+
+    replayVoicePath = voicePath
+    replayVoiceBuffer = null
+    replayPreparation = (async () => {
+      const voiceBuffer = await decodeFile(audioContext, voicePath)
+      // 预解码期间录音可能已经继续并生成新文件，旧结果不能覆盖新缓存。
+      if (replayVoicePath !== voicePath) return
+      replayVoiceBuffer = voiceBuffer
+      const gainStartedAt = Date.now()
+      replayVoiceGain = calculateVoiceGain(voiceBuffer)
+      console.info('[录音诊断] 人声音量扫描完成', {
+        elapsedMs: Date.now() - gainStartedAt,
+        gain: replayVoiceGain
+      })
+    })().finally(() => {
+      if (replayVoicePath === voicePath) replayPreparation = null
+    })
+    return replayPreparation
   }
 
   function scheduleSources(
     includeVoice: boolean,
     offset: number,
     voiceBuffer?: any,
-    endsAt?: number
+    endsAt?: number,
+    voiceOffset = 0,
+    includeAccompaniment = true
   ) {
     ignoreEnded = false
-    scheduledAt = Number(audioContext.currentTime) + START_LEAD_SECONDS
-    accompanimentSource = createSource(
-      audioContext,
-      accompanimentBuffer,
-      includeVoice ? REPLAY_ACCOMPANIMENT_GAIN : 1
-    )
-    accompanimentSource.onended = handleAccompanimentEnded
+    const startLeadSeconds = includeVoice
+      ? REPLAY_START_LEAD_SECONDS
+      : PRACTICE_START_LEAD_SECONDS
+    scheduledAt = Number(audioContext.currentTime) + startLeadSeconds
     const duration = Math.max(
       0,
       Math.min(segmentDuration, endsAt ?? segmentDuration) - offset
     )
-    accompanimentSource.start(scheduledAt, segmentOffset + offset, duration)
+    if (includeAccompaniment) {
+      accompanimentSource = createSource(
+        audioContext,
+        accompanimentBuffer,
+        includeVoice ? REPLAY_ACCOMPANIMENT_GAIN : 1
+      )
+      accompanimentSource.onended = handleTransportEnded
+      accompanimentSource.start(scheduledAt, segmentOffset + offset, duration)
+    }
     if (includeVoice && voiceBuffer) {
       voiceSource = createSource(audioContext, voiceBuffer, replayVoiceGain, true)
-      voiceSource.start(scheduledAt, offset, duration)
+      if (!includeAccompaniment) voiceSource.onended = handleTransportEnded
+      voiceSource.start(scheduledAt, voiceOffset + offset, duration)
     }
-    scheduleStartNotification()
+    scheduleStartNotification(startLeadSeconds)
   }
 
-  function scheduleStartNotification() {
+  function scheduleStartNotification(startLeadSeconds: number) {
     clearTimers()
     const notifyWhenStarted = () => {
       if (mode !== 'practice' && mode !== 'replay') return
@@ -128,7 +181,7 @@ function createScheduledTransport() {
       clockTimer = undefined
     }
     clockTimer = setInterval(notifyWhenStarted, CLOCK_POLL_INTERVAL_MS)
-    startTimer = setTimeout(notifyWhenStarted, START_LEAD_SECONDS * 1000)
+    startTimer = setTimeout(notifyWhenStarted, startLeadSeconds * 1000)
   }
 
   function pause(modeToPause: ActiveTransportMode) {
@@ -156,7 +209,14 @@ function createScheduledTransport() {
   function resumeReplay() {
     if (mode !== 'paused' || pausedMode !== 'replay' || !replayVoiceBuffer) return
     mode = 'replay'
-    scheduleSources(true, pausedAt, replayVoiceBuffer, replayEndsAt)
+    scheduleSources(
+      true,
+      pausedAt,
+      replayVoiceBuffer,
+      replayEndsAt,
+      replayVoiceOffset,
+      replayIncludesAccompaniment
+    )
   }
 
   function position() {
@@ -172,15 +232,18 @@ function createScheduledTransport() {
   }
 
   function stop() {
+    const stopStartedAt = Date.now()
     pausedAt = position()
     mode = 'idle'
     stopSources()
+    console.info('[录音诊断] 回放源停止完成', { elapsedMs: Date.now() - stopStartedAt })
   }
 
   function stopSources() {
     ignoreEnded = true
     clearTimers()
     if (accompanimentSource) accompanimentSource.onended = null
+    if (voiceSource) voiceSource.onended = null
     try {
       accompanimentSource?.stop()
     } catch {}
@@ -194,7 +257,7 @@ function createScheduledTransport() {
     })
   }
 
-  function handleAccompanimentEnded() {
+  function handleTransportEnded() {
     if (ignoreEnded || (mode !== 'practice' && mode !== 'replay')) return
     mode = 'idle'
     clearTimers()
@@ -211,11 +274,15 @@ function createScheduledTransport() {
   function destroy() {
     mode = 'idle'
     stopSources()
+    replayVoiceBuffer = null
+    replayVoicePath = ''
+    replayPreparation = null
     audioContext.close?.()
   }
 
   return {
     prepare,
+    prepareReplay,
     startPractice,
     startReplay,
     pausePractice,
@@ -293,10 +360,25 @@ function calculateVoiceGain(buffer: any) {
 }
 
 async function decodeFile(context: any, path: string): Promise<any> {
+  const readStartedAt = Date.now()
   const bytes = await readAudioFile(path)
+  console.info('[录音诊断] 音频文件读取完成', {
+    elapsedMs: Date.now() - readStartedAt,
+    byteLength: bytes.byteLength
+  })
+  const decodeStartedAt = Date.now()
   return new Promise((resolve, reject) => {
-    const pending = context.decodeAudioData(bytes.slice(0), resolve, reject)
-    if (pending?.then) pending.then(resolve, reject)
+    let completed = false
+    const finish = (buffer: any) => {
+      if (completed) return
+      completed = true
+      console.info('[录音诊断] decodeAudioData 完成', {
+        elapsedMs: Date.now() - decodeStartedAt
+      })
+      resolve(buffer)
+    }
+    const pending = context.decodeAudioData(bytes.slice(0), finish, reject)
+    if (pending?.then) pending.then(finish, reject)
   })
 }
 
@@ -368,6 +450,8 @@ function createFallbackTransport() {
   let callbacks: PracticeTransportCallbacks | null = null
   let segmentOffset = 0
   let segmentDuration = Number.POSITIVE_INFINITY
+  let replayIncludesAccompaniment = true
+  let replayVoicePath = ''
   let endTimer: ReturnType<typeof setTimeout> | undefined
 
   function scheduleEnd() {
@@ -385,14 +469,35 @@ function createFallbackTransport() {
     startedAt = Date.now()
     callbacks?.onStarted()
   })
-  accompaniment.onEnded(() => callbacks?.onEnded())
+  voice.onPlay(() => {
+    if (mode !== 'replay' || replayIncludesAccompaniment) return
+    startedAt = Date.now()
+    callbacks?.onStarted()
+  })
+  accompaniment.onEnded(handleFallbackEnded)
+  voice.onEnded(() => {
+    if (mode === 'replay' && !replayIncludesAccompaniment) handleFallbackEnded()
+  })
   accompaniment.onError(() => callbacks?.onError())
+  voice.onError(() => callbacks?.onError())
+
+  function handleFallbackEnded() {
+    if (mode !== 'practice' && mode !== 'replay') return
+    mode = 'idle'
+    if (endTimer) clearTimeout(endTimer)
+    callbacks?.onEnded()
+  }
 
   return {
     async prepare(path: string, audioOffset = 0, duration?: number) {
       accompaniment.src = path
       segmentOffset = Math.max(0, audioOffset)
       segmentDuration = duration === undefined ? Number.POSITIVE_INFINITY : Math.max(0, duration)
+    },
+    async prepareReplay(voicePath: string) {
+      if (replayVoicePath === voicePath) return
+      replayVoicePath = voicePath
+      voice.src = voicePath
     },
     async startPractice(nextCallbacks: PracticeTransportCallbacks) {
       callbacks = nextCallbacks
@@ -403,16 +508,26 @@ function createFallbackTransport() {
       accompaniment.play()
       scheduleEnd()
     },
-    async startReplay(voicePath: string, nextCallbacks: PracticeTransportCallbacks) {
+    async startReplay(
+      voicePath: string,
+      nextCallbacks: PracticeTransportCallbacks,
+      _endsAt?: number,
+      voiceOffset = 0,
+      includeAccompaniment = true
+    ) {
       callbacks = nextCallbacks
       mode = 'replay'
       pausedAt = 0
+      replayIncludesAccompaniment = includeAccompaniment
       accompaniment.volume = REPLAY_ACCOMPANIMENT_GAIN
       voice.volume = 1
-      voice.src = voicePath
+      if (replayVoicePath !== voicePath) {
+        replayVoicePath = voicePath
+        voice.src = voicePath
+      }
       accompaniment.seek(segmentOffset)
-      voice.seek(0)
-      accompaniment.play()
+      voice.seek(voiceOffset)
+      if (replayIncludesAccompaniment) accompaniment.play()
       voice.play()
       scheduleEnd()
     },
@@ -420,7 +535,7 @@ function createFallbackTransport() {
       pausedAt = Math.max(0, (Date.now() - startedAt) / 1000)
       mode = 'paused'
       if (endTimer) clearTimeout(endTimer)
-      accompaniment.pause()
+      if (replayIncludesAccompaniment) accompaniment.pause()
       voice.pause()
     },
     pausePractice() {
@@ -432,7 +547,7 @@ function createFallbackTransport() {
     resumePractice(nextCallbacks: PracticeTransportCallbacks) {
       callbacks = nextCallbacks
       mode = 'practice'
-      accompaniment.play()
+      if (replayIncludesAccompaniment) accompaniment.play()
       scheduleEnd()
     },
     resumeReplay() {

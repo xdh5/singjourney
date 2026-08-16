@@ -9,10 +9,10 @@
       role="button"
       @tap="select('home')"
     >
-      <uni-icons
-        type="home"
-        :size="28"
-        :color="iconColor('home')"
+      <app-icon
+        name="home"
+        :size="18"
+        :tone="iconTone('home')"
       />
       <text class="nav-label">{{ t('nav.home') }}</text>
     </view>
@@ -22,10 +22,10 @@
       role="button"
       @tap="select('profile')"
     >
-      <uni-icons
-        type="person-filled"
-        :size="27"
-        :color="iconColor('profile')"
+      <app-icon
+        name="user"
+        :size="18"
+        :tone="iconTone('profile')"
       />
       <text class="nav-label">{{ t('nav.profile') }}</text>
     </view>
@@ -34,6 +34,8 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import AppIcon from './app-icon.vue'
+import type { AppIconTone } from './app-icon'
 
 const props = defineProps<{ active: 'home' | 'profile' }>()
 const { t } = useI18n()
@@ -43,8 +45,8 @@ function select(tab: 'home' | 'profile') {
   uni.redirectTo({ url: tab === 'home' ? '/pages/home/index' : '/pages/profile/index' })
 }
 
-function iconColor(tab: 'home' | 'profile') {
-  return tab === props.active ? '#079864' : '#85908c'
+function iconTone(tab: 'home' | 'profile'): AppIconTone {
+  return tab === props.active ? 'primary' : 'muted'
 }
 </script>
 

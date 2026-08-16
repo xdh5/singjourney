@@ -1,7 +1,8 @@
 import { requestJson, resolveApiUrl } from '../../utils/http/client'
 import type { PracticeManifest } from '../../utils/practice/types'
+import type { VoicePreset } from '../account/preferences'
 
-export type VoicePreset = 'male' | 'female'
+export type { VoicePreset } from '../account/preferences'
 
 export type PracticeCategory = { key: string; name: string }
 

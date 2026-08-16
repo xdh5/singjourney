@@ -1,8 +1,8 @@
 import { CLIENT_RELEASE } from '../config/release'
-import { requestJson } from './http/client'
+import { apiStorageKey, requestJson } from './http/client'
 
-const TELEMETRY_STORAGE_KEY = 'singjourney.telemetry.queue'
-const ANONYMOUS_ID_STORAGE_KEY = 'singjourney.telemetry.anonymous-id'
+const TELEMETRY_STORAGE_KEY = apiStorageKey('telemetry.queue')
+const ANONYMOUS_ID_STORAGE_KEY = apiStorageKey('telemetry.anonymous-id')
 const TELEMETRY_FLUSH_DELAY_MS = 5000
 const TELEMETRY_MAXIMUM_RETRY_DELAY_MS = 60000
 const MAXIMUM_QUEUED_EVENTS = 100

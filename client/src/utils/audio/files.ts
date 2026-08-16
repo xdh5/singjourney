@@ -1,15 +1,13 @@
 import { wrapPcmAsWav, wrapPcmChunksAsWav } from './wav'
 
-const MP3_FILE_EXTENSION = '.mp3'
-const TEMPORARY_MP3_FILE_PREFIX = 'singjourney-recording'
-const TEMPORARY_MP3_PREVIEW_PREFIX = 'singjourney-preview'
+const WAV_FILE_EXTENSION = '.wav'
 
 export async function persistAudio(tempFilePath: string, id: string) {
   // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   const fs = wxApi.getFileSystemManager()
-  if (tempFilePath.toLowerCase().endsWith(MP3_FILE_EXTENSION)) {
-    const filePath = `${wxApi.env.USER_DATA_PATH}/singjourney-${id}${MP3_FILE_EXTENSION}`
+  if (tempFilePath.toLowerCase().endsWith(WAV_FILE_EXTENSION)) {
+    const filePath = `${wxApi.env.USER_DATA_PATH}/singjourney-${id}${WAV_FILE_EXTENSION}`
     await new Promise<void>((resolve, reject) => {
       fs.copyFile({
         srcPath: tempFilePath,
@@ -45,60 +43,6 @@ export async function persistAudio(tempFilePath: string, id: string) {
   // #endif
 }
 
-export async function createTemporaryMp3(sessionId: string) {
-  // #ifdef MP-WEIXIN
-  const wxApi = (globalThis as any).wx
-  const filePath = `${wxApi.env.USER_DATA_PATH}/${TEMPORARY_MP3_FILE_PREFIX}-${sessionId}${MP3_FILE_EXTENSION}`
-  await new Promise<void>((resolve, reject) => {
-    wxApi
-      .getFileSystemManager()
-      .writeFile({ filePath, data: new ArrayBuffer(0), success: () => resolve(), fail: reject })
-  })
-  return filePath
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  throw new Error('当前平台不使用微信 MP3 临时文件')
-  // #endif
-}
-
-export async function appendTemporaryAudio(filePath: string, data: ArrayBuffer) {
-  // #ifdef MP-WEIXIN
-  const wxApi = (globalThis as any).wx
-  await new Promise<void>((resolve, reject) => {
-    wxApi
-      .getFileSystemManager()
-      .appendFile({ filePath, data, success: () => resolve(), fail: reject })
-  })
-  return
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  void filePath
-  void data
-  throw new Error('当前平台不使用微信音频分块写入')
-  // #endif
-}
-
-export async function createTemporaryMp3Preview(sourcePath: string, previewId: string) {
-  // #ifdef MP-WEIXIN
-  const wxApi = (globalThis as any).wx
-  const filePath = `${wxApi.env.USER_DATA_PATH}/${TEMPORARY_MP3_PREVIEW_PREFIX}-${previewId}${MP3_FILE_EXTENSION}`
-  await new Promise<void>((resolve, reject) => {
-    wxApi
-      .getFileSystemManager()
-      .copyFile({ srcPath: sourcePath, destPath: filePath, success: () => resolve(), fail: reject })
-  })
-  return filePath
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  void sourcePath
-  void previewId
-  throw new Error('当前平台不使用微信 MP3 试听快照')
-  // #endif
-}
-
 export async function createPcmPreview(
   pcm: ArrayBuffer | readonly Uint8Array[],
   pcmByteLength?: number
@@ -109,13 +53,24 @@ export async function createPcmPreview(
   const chunks = pcm instanceof ArrayBuffer ? [new Uint8Array(pcm)] : pcm
   const totalByteLength =
     pcmByteLength ?? (pcm instanceof ArrayBuffer ? pcm.byteLength : sumChunkByteLength(pcm))
+  const wrapStartedAt = Date.now()
+  const wav = wrapPcmChunksAsWav(chunks, totalByteLength, 16000)
+  console.info('[录音诊断] PCM 包装 WAV 完成', {
+    elapsedMs: Date.now() - wrapStartedAt,
+    pcmByteLength: totalByteLength
+  })
+  const writeStartedAt = Date.now()
   await new Promise<void>((resolve, reject) => {
     wxApi.getFileSystemManager().writeFile({
       filePath,
-      data: wrapPcmChunksAsWav(chunks, totalByteLength, 16000),
+      data: wav,
       success: () => resolve(),
       fail: reject
     })
+  })
+  console.info('[录音诊断] WAV 临时文件写入完成', {
+    elapsedMs: Date.now() - writeStartedAt,
+    byteLength: wav.byteLength
   })
   return filePath
   // #endif

@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from app.modules.practice.constants import (
     CUE_REST_BEATS,
@@ -42,19 +42,6 @@ class PracticeScore:
     duration: float
     cue_notes: tuple[CueNoteEvent, ...]
     target_notes: tuple[TargetNoteEvent, ...]
-
-    def manifest(self, audio_path: str) -> dict[str, object]:
-        return {
-            "exerciseKey": self.exercise_key,
-            "version": self.version,
-            "voice": self.voice,
-            "tempoBpm": self.tempo_bpm,
-            "range": {"minimumMidi": self.range_start_midi, "maximumMidi": self.range_end_midi},
-            "duration": self.duration,
-            "audioPath": audio_path,
-            "targetNotes": [asdict(note) for note in self.target_notes],
-        }
-
 
 def build_practice_master_score(exercise_key: str) -> PracticeScore:
     """Build one authoritative C3-F5 accompaniment for an exercise."""

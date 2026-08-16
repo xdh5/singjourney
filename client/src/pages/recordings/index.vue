@@ -4,13 +4,10 @@
     class="page"
     :class="{ 'page-empty': items.length === 0, 'page-recordings': items.length > 0 }"
   >
-    <uni-notice-bar
-      class="storage-notice"
-      :text="t('recordings.localNotice')"
-      show-icon
-      background-color="#edf5f1"
-      color="#294c43"
-    />
+    <view class="storage-notice">
+      <app-icon name="info" :size="16" />
+      <text>{{ t('recordings.localNotice') }}</text>
+    </view>
 
     <template v-if="items.length === 0">
       <view class="empty">
@@ -40,11 +37,10 @@
             role="button"
             @tap="toggleSelectionMode"
           >
-            <view
-              class="selection-icon"
-              :class="{ active: selectionMode }"
-              >{{ selectionMode ? '−' : '✓' }}</view
-            >
+            <app-icon
+              :name="selectionMode ? 'checkbox-empty' : 'checkbox-checked'"
+              :size="15"
+            />
             <text>{{
               selectionMode ? t('recordings.cancelSelection') : t('recordings.select')
             }}</text>
@@ -56,11 +52,7 @@
             role="button"
             @tap="removeSelected"
           >
-            <uni-icons
-              type="trash-filled"
-              :size="18"
-              color="#356b5b"
-            />
+            <app-icon name="delete" :size="18" />
             <text>{{ t('recordings.delete') }}</text>
           </view>
         </view>
@@ -90,6 +82,7 @@ import { storeToRefs } from 'pinia'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import AppNavbar from '../../components/app-navbar.vue'
+import AppIcon from '../../components/app-icon.vue'
 import startRecordingArt from '../../assets/recordings/start-recording.svg'
 import { setPageTitle } from '../../i18n'
 import {
@@ -104,7 +97,7 @@ import {
   retainExistingRecordingSelection,
   toggleRecordingSelection as updateRecordingSelection
 } from '../../utils/recording/catalog'
-import { exportAudio } from '../../utils/share'
+import { createAudioExportSession } from '../../utils/share'
 import RecordingCard from './components/recording-card.vue'
 import { useRecordingsStore } from '../../stores/recordings'
 
@@ -123,6 +116,7 @@ const visibleItems = computed(() => items.value.slice(0, visibleItemCount.value)
 const selectedIds = ref<string[]>([])
 const selectionMode = ref(false)
 const { locale, t } = useI18n()
+const audioExportSession = createAudioExportSession()
 
 onShow(loadRecordings)
 onReachBottom(() => {
@@ -204,8 +198,13 @@ async function exportSingle(item: Recording) {
   let source = ''
   try {
     const currentName = displayRecordingName(item)
-    source = await getPlaybackSource(item)
-    const result = await exportAudio({ filePath: source, name: currentName })
+    const exportPrepared = audioExportSession.isPrepared(item.id)
+    if (!exportPrepared) source = await getPlaybackSource(item)
+    const result = await audioExportSession.run({
+      key: item.id,
+      filePath: source,
+      name: currentName
+    })
     if (result === 'cancelled') return
   } catch {
     uni.showToast({ title: t('record.shareFailed'), icon: 'none' })
@@ -276,8 +275,18 @@ function recordingTypeLabel(item: Recording) {
   background: linear-gradient(180deg, #fff 0%, #fbfcfb 100%);
 }
 .storage-notice {
-  display: block;
+  display: flex;
+  min-height: 72rpx;
+  align-items: center;
+  gap: 14rpx;
   margin-bottom: 24rpx;
+  padding: 14rpx 18rpx;
+  border-radius: 14rpx;
+  box-sizing: border-box;
+  color: #294c43;
+  background: #edf5f1;
+  font-size: 22rpx;
+  line-height: 1.45;
 }
 .section-heading {
   display: flex;
@@ -314,24 +323,6 @@ function recordingTypeLabel(item: Recording) {
   background: #fff;
   font-size: 22rpx;
   font-weight: 800;
-}
-.selection-icon {
-  display: flex;
-  width: 28rpx;
-  height: 28rpx;
-  align-items: center;
-  justify-content: center;
-  border: 2rpx solid #356b5b;
-  border-radius: 5rpx;
-  box-sizing: border-box;
-  color: #356b5b;
-  font-size: 20rpx;
-  font-weight: 900;
-  line-height: 1;
-}
-.selection-icon.active {
-  color: #fff;
-  background: #356b5b;
 }
 .delete-selection-button {
   min-width: 92rpx;

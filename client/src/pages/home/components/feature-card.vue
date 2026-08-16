@@ -36,7 +36,6 @@ const emit = defineEmits<{ select: [] }>()
   overflow: hidden;
   border-radius: 28rpx;
   background: #fff;
-  box-shadow: 0 12rpx 26rpx rgba(48, 78, 67, 0.12);
 }
 .feature-card-art {
   position: absolute;

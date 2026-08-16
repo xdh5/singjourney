@@ -6,7 +6,7 @@
         role="button"
         @tap="goBack"
       >
-        <uni-icons type="left" :size="20" color="#ffffff" />
+        <app-icon name="back" :size="22" tone="white" />
       </view>
       <text class="navbar-title">{{ t(titleKey) }}</text>
     </view>
@@ -15,6 +15,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import AppIcon from './app-icon.vue'
 import { getWindowMetrics } from '../utils/window-metrics'
 
 const props = withDefaults(defineProps<{ titleKey: string; interceptBack?: boolean }>(), {

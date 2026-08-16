@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
@@ -61,8 +61,14 @@ import { usePracticeStatisticsStore } from '../../stores/practice-statistics'
 import DailyPracticeCard from './components/daily-practice-card.vue'
 import FeatureCard from './components/feature-card.vue'
 
-const { t } = useI18n()
-const dailyMessage = ref(t('home.dailyPracticeDescription'))
+const { locale, t } = useI18n()
+const dailyMessageCacheKey = () => `singjourney.home.daily-message.${locale.value}`
+const cachedDailyMessage = uni.getStorageSync(dailyMessageCacheKey())
+const dailyMessage = ref(
+  typeof cachedDailyMessage === 'string' && cachedDailyMessage
+    ? cachedDailyMessage
+    : t('home.dailyPracticeDescription')
+)
 const statisticsStore = usePracticeStatisticsStore()
 const { statistics } = storeToRefs(statisticsStore)
 const todayMinutes = computed(() => Math.floor(statistics.value.today.durationSeconds / 60))
@@ -70,20 +76,35 @@ const windowMetrics = getWindowMetrics()
 const pageStyle = {
   paddingTop: `${windowMetrics.statusBarHeight + (48 * windowMetrics.windowWidth) / 750}px`
 }
+let skipFirstShowRefresh = true
+let refreshPromise: Promise<void> | null = null
+
+onLoad(() => {
+  void refreshHomeData()
+})
+
 onShow(() => {
   setPageTitle('app.name')
-  dailyMessage.value = t('home.dailyPracticeDescription')
-  void fetchDailyPracticeMessage()
-    .then((message) => {
-      dailyMessage.value = message
-    })
-    .catch(() => {
-      // 接口不可用时保留默认文案，不打扰用户。
-    })
-  void statisticsStore.refresh().catch(() => {
-    // 统计接口不可用时保留已有数字，不打扰用户。
-  })
+  if (skipFirstShowRefresh) {
+    skipFirstShowRefresh = false
+    return
+  }
+  void refreshHomeData()
 })
+
+function refreshHomeData() {
+  if (refreshPromise) return refreshPromise
+  refreshPromise = Promise.allSettled([
+    fetchDailyPracticeMessage().then((message) => {
+      dailyMessage.value = message
+      uni.setStorageSync(dailyMessageCacheKey(), message)
+    }),
+    statisticsStore.refresh()
+  ]).then(() => undefined).finally(() => {
+    refreshPromise = null
+  })
+  return refreshPromise
+}
 
 function open(url: string) {
   trackTelemetry(TELEMETRY_EVENT.FEATURE_OPENED, {

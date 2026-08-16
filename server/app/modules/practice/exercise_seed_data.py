@@ -1,19 +1,4 @@
-"""Replace the practice catalog with thirty accurately grouped daily vocal patterns."""
-
-import sqlalchemy as sa
-from alembic import op
-
-from app.modules.practice.models import (
-    PracticeCategory,
-    PracticeExercise,
-    PracticeExerciseCategory,
-)
-
-
-revision = "20260815_0007"
-down_revision = "20260815_0005"
-branch_labels = None
-depends_on = None
+"""Current practice categories and thirty daily vocal-pattern seed rows."""
 
 
 CATEGORIES = [
@@ -87,34 +72,3 @@ EXERCISES = [
     ("mix-yeah-five", "mix", "Yeah五音阶混声", "Yeah Five-note Mix", "用自然呼喊感的轻量Yeah完成五音阶，避免大音量和喉部挤压。", "Use a light, speech-like Yeah over the five-note scale without excess volume or throat squeeze.", "1–2–3–4–5–4–3–2–1", "Yeah", 80, 4, "medium", False),
     ("mix-mum-tenth", "mix", "Mum十度混声", "Mum Tenth Mix", "用Mum逐步到达十度，保持上下声区统一，音域边缘不要硬撑。", "Carry Mum gradually to the tenth while keeping registers unified and never forcing the range edge.", "1–3–5–8–10–8–5–3–1", "Mum", 76, 3, "focused", False),
 ]
-
-
-def upgrade() -> None:
-    exercise_rows = [
-        {
-            "id": row[0], "title_zh_hans": row[2], "title_en": row[3],
-            "tip_zh_hans": row[4], "tip_en": row[5], "pattern": row[6],
-            "recommended_syllables": row[7], "tempo": row[8], "repetitions": row[9],
-            "intensity": row[10], "enabled": True, "sort_order": index * 10,
-        }
-        for index, row in enumerate(EXERCISES, start=1)
-    ]
-    category_rows = []
-    for index, row in enumerate(EXERCISES, start=1):
-        exercise_id, primary_category = row[0], row[1]
-        category_rows.append({"exercise_id": exercise_id, "category_key": primary_category, "sort_order": 0})
-        category_rows.extend(
-            {"exercise_id": exercise_id, "category_key": category_key, "sort_order": tag_index * 10}
-            for tag_index, category_key in enumerate(EXTRA_TAGS.get(exercise_id, ()), start=1)
-            if category_key != primary_category
-        )
-    op.bulk_insert(PracticeCategory.__table__, CATEGORIES)
-    op.bulk_insert(PracticeExercise.__table__, exercise_rows)
-    op.bulk_insert(PracticeExerciseCategory.__table__, category_rows)
-
-
-def downgrade() -> None:
-    bind = op.get_bind()
-    bind.execute(sa.text("DELETE FROM practice_exercise_categories"))
-    bind.execute(sa.text("DELETE FROM practice_exercises"))
-    bind.execute(sa.text("DELETE FROM practice_categories"))

@@ -45,7 +45,14 @@ def post_wechat_login(
     settings: Settings = Depends(get_settings),
 ) -> AuthSessionResponse:
     try:
-        issued = login_with_wechat_code(db, settings, request.code, request.locale)
+        issued = login_with_wechat_code(
+            db,
+            settings,
+            request.code,
+            request.locale,
+            request.display_name,
+            request.avatar_data_url,
+        )
     except WeChatConfigurationError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
     except WeChatAuthenticationError as error:
@@ -58,6 +65,7 @@ def post_wechat_login(
             display_name=issued.user.display_name,
             avatar_data_url=issued.user.avatar_data_url,
             locale=issued.user.locale,
+            preferred_voice_preset=issued.user.preferred_voice_preset,
         ),
     )
 
@@ -91,6 +99,7 @@ def get_current_session(
             display_name=user.display_name,
             avatar_data_url=user.avatar_data_url,
             locale=user.locale,
+            preferred_voice_preset=user.preferred_voice_preset,
         ),
     )
 
@@ -101,12 +110,19 @@ def patch_profile(
     user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ) -> AuthUser:
-    updated = update_profile(db, user, request.display_name, request.avatar_data_url)
+    updated = update_profile(
+        db,
+        user,
+        request.display_name,
+        request.avatar_data_url,
+        request.preferred_voice_preset,
+    )
     return AuthUser(
         id=updated.id,
         display_name=updated.display_name,
         avatar_data_url=updated.avatar_data_url,
         locale=updated.locale,
+        preferred_voice_preset=updated.preferred_voice_preset,
     )
 
 

@@ -54,11 +54,46 @@ class PracticePeriodSummary(BaseModel):
     duration_seconds: float
 
 
-class PracticeStatisticsResponse(BaseModel):
+class PracticeWeekOverview(PracticePeriodSummary):
+    practice_days: int
+    average_daily_seconds: float
+
+
+class PracticeCategorySummary(BaseModel):
+    category_key: str
+    name: str
+    sessions: int
+    duration_seconds: float
+    percentage: float
+
+
+class PracticeRankingItem(PracticeExerciseSummary):
+    pass
+
+
+class PracticeWeekStatistics(BaseModel):
     today: PracticePeriodSummary
-    total: PracticePeriodSummary
-    activity: list[PracticeActivityDay]
-    today_exercises: list[PracticeExerciseSummary]
+    overview: PracticeWeekOverview
+    daily_activity: list[PracticeActivityDay]
+    category_distribution: list[PracticeCategorySummary]
+    top_exercises: list[PracticeRankingItem]
+
+
+class PracticeLifetimeHistory(PracticePeriodSummary):
+    started_on: date | None
+    practice_days: int
+    longest_streak_days: int
+
+
+class PracticeLifetimeStatistics(BaseModel):
+    history: PracticeLifetimeHistory
+    category_distribution: list[PracticeCategorySummary]
+    top_exercises: list[PracticeRankingItem]
+
+
+class PracticeStatisticsResponse(BaseModel):
+    week: PracticeWeekStatistics
+    lifetime: PracticeLifetimeStatistics
 
 
 class PracticeCategoryResponse(BaseModel):

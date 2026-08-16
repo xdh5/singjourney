@@ -1,18 +1,22 @@
-import { HttpError, requestJson, type HttpMethod } from './client'
+import { apiStorageKey, HttpError, requestJson, type HttpMethod } from './client'
+import type { VoicePreset } from '../../services/account/preferences'
 
-const AUTH_SESSION_STORAGE_KEY = 'singjourney.auth-session'
+const AUTH_SESSION_STORAGE_KEY = apiStorageKey('auth-session')
+const LOCAL_USER_SNAPSHOT_STORAGE_KEY = apiStorageKey('account.user-local-snapshot')
 const SESSION_EXPIRY_SAFETY_MS = 60 * 1000
 
-interface AuthUser {
+export interface AuthUser {
   id: string
   display_name: string | null
   avatar_data_url: string | null
   locale: string | null
+  preferred_voice_preset: VoicePreset | null
 }
 
 export interface UserProfileUpdate {
   displayName?: string
   avatarDataUrl?: string
+  preferredVoicePreset?: VoicePreset
 }
 
 export interface StoredAuthSession {
@@ -37,11 +41,16 @@ export function getStoredAuthSession(): StoredAuthSession | null {
   return stored
 }
 
-export async function loginWithWeChat(locale: string) {
+export async function loginWithWeChat(locale: string, profile: UserProfileUpdate) {
   const code = await requestWeChatLoginCode()
   const response = await requestJson<LoginResponse>('/auth/wechat/login', {
     method: 'POST',
-    data: { code, locale }
+    data: {
+      code,
+      locale,
+      display_name: profile.displayName,
+      avatar_data_url: profile.avatarDataUrl
+    }
   })
   const session: StoredAuthSession = {
     accessToken: response.access_token,
@@ -56,10 +65,24 @@ export function clearStoredAuthSession() {
   uni.removeStorageSync(AUTH_SESSION_STORAGE_KEY)
 }
 
+export function storeLocalUserSnapshot(user: AuthUser) {
+  uni.setStorageSync(LOCAL_USER_SNAPSHOT_STORAGE_KEY, user)
+}
+
+export function readLocalUserSnapshot(): AuthUser | null {
+  const stored = uni.getStorageSync(LOCAL_USER_SNAPSHOT_STORAGE_KEY) as AuthUser | undefined
+  return stored?.id ? stored : null
+}
+
+export function clearLocalUserSnapshot() {
+  uni.removeStorageSync(LOCAL_USER_SNAPSHOT_STORAGE_KEY)
+}
+
 export async function updateCurrentUserProfile(profile: UserProfileUpdate) {
   const user = await requestAuthenticatedJson<AuthUser>('/auth/profile', 'PATCH', {
     display_name: profile.displayName,
-    avatar_data_url: profile.avatarDataUrl
+    avatar_data_url: profile.avatarDataUrl,
+    preferred_voice_preset: profile.preferredVoicePreset
   })
   const session = getStoredAuthSession()
   if (!session) throw new Error('Authentication session required')

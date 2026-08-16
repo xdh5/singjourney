@@ -1,17 +1,23 @@
 ﻿<template>
   <view class="page">
-    <view
-      class="profile-card"
-      @tap="editProfile"
-    >
-      <view class="avatar">
+    <view class="profile-card">
+      <view
+        class="avatar"
+        role="button"
+        @tap="handleAvatarTap"
+      >
         <image
           class="avatar-image"
           :src="session?.user.avatar_data_url || defaultAvatar"
           mode="aspectFill"
         />
       </view>
-      <text class="title">{{ session?.user.display_name || t('account.defaultNickname') }}</text>
+      <view class="identity-row">
+        <text class="title">
+          {{ session?.user.display_name || t('account.defaultNickname') }}
+        </text>
+        <text v-if="!session" class="guest-label">（{{ t('account.guest') }}）</text>
+      </view>
     </view>
     <view class="profile-links">
       <profile-link
@@ -19,6 +25,13 @@
         :title="t('home.practiceRecords')"
         :description="t('home.practiceRecordsDescription')"
         @select="openPracticeStats"
+      />
+      <profile-link
+        icon="email"
+        :title="t('account.contactAuthor')"
+        description="zhaozy086@gmail.com"
+        :show-chevron="false"
+        @select="copyAuthorEmail"
       />
     </view>
 
@@ -40,33 +53,36 @@
             :src="avatarPreview"
             mode="aspectFill"
           />
-          <uni-icons
+          <app-icon
             v-else
-            type="camera-filled"
+            name="user"
             :size="30"
-            color="#356b5b"
           />
         </button>
         <input
-          v-model="displayNameDraft"
           class="nickname-input"
           type="nickname"
+          name="nickname"
+          :value="displayNameDraft"
           :placeholder="t('account.nicknamePlaceholder')"
           maxlength="30"
+          confirm-type="done"
+          @input="updateNickname"
+          @blur="updateNickname"
         />
         <view class="editor-actions">
           <button
             class="editor-button secondary"
-            @tap="skipProfile"
+            @tap="cancelLogin"
           >
-            {{ t('account.later') }}
+            {{ t('account.cancel') }}
           </button>
           <button
             class="editor-button primary"
             :disabled="savingProfile"
-            @tap="saveProfile"
+            @tap="confirmLogin"
           >
-            {{ t('account.save') }}
+            {{ t('account.confirmLogin') }}
           </button>
         </view>
       </view>
@@ -81,6 +97,7 @@ import { storeToRefs } from 'pinia'
 import { onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import BottomNav from '../../components/bottom-nav.vue'
+import AppIcon from '../../components/app-icon.vue'
 import { setPageTitle } from '../../i18n'
 import ProfileLink from './components/profile-link.vue'
 import { useAuthenticationStore } from '../../stores/authentication'
@@ -118,36 +135,46 @@ function openPracticeStats() {
     confirmText: t('account.login'),
     cancelText: t('account.continueLocal'),
     success: (result) => {
-      if (result.confirm) void loginFor('/pages/practice-stats/index')
+      if (result.confirm) showLoginEditor('/pages/practice-stats/index')
       else if (result.cancel) open('/pages/practice-stats/index')
     }
   })
 }
 
-async function loginFor(destination: string) {
-  try {
-    const loggedIn = await authenticationStore.login(locale.value)
-    if (!loggedIn) return
-    pendingDestination.value = destination
-    if (loggedIn.user.display_name || loggedIn.user.avatar_data_url) {
-      open(destination)
-      pendingDestination.value = undefined
-      return
-    }
-    showProfileEditor()
-  } catch {
-    uni.showToast({ title: t('account.loginFailed'), icon: 'none' })
+function handleAvatarTap() {
+  authenticationStore.refreshFromStorage()
+  if (!session.value) {
+    showLoginEditor('')
+    return
   }
+  uni.showModal({
+    title: t('account.logoutTitle'),
+    content: t('account.logoutConfirm'),
+    confirmText: t('account.logout'),
+    cancelText: t('account.cancel'),
+    success: (result) => {
+      if (!result.confirm) return
+      void authenticationStore.logout().catch(() => {
+        uni.showToast({ title: t('account.logoutSyncFailed'), icon: 'none' })
+      })
+    }
+  })
 }
 
-function editProfile() {
-  if (session.value) showProfileEditor()
+function copyAuthorEmail() {
+  uni.setClipboardData({
+    data: 'zhaozy086@gmail.com',
+    success: () => {
+      uni.showToast({ title: t('account.emailCopied'), icon: 'none' })
+    }
+  })
 }
 
-function showProfileEditor() {
-  displayNameDraft.value = session.value?.user.display_name || ''
+function showLoginEditor(destination: string) {
+  displayNameDraft.value = ''
   avatarPreview.value = session.value?.user.avatar_data_url || defaultAvatar
   avatarDataUrlDraft.value = undefined
+  pendingDestination.value = destination || undefined
   profileEditorVisible.value = true
 }
 
@@ -162,7 +189,11 @@ async function chooseAvatar(event: { detail: { avatarUrl?: string } }) {
   }
 }
 
-async function saveProfile() {
+function updateNickname(event: { detail: { value?: string } }) {
+  displayNameDraft.value = event.detail.value || ''
+}
+
+async function confirmLogin() {
   const displayName = displayNameDraft.value.trim()
   if (!displayName && !avatarDataUrlDraft.value) {
     uni.showToast({ title: t('account.profileRequired'), icon: 'none' })
@@ -170,23 +201,26 @@ async function saveProfile() {
   }
   savingProfile.value = true
   try {
-    await authenticationStore.updateProfile({
+    await authenticationStore.login(locale.value, {
       displayName: displayName || undefined,
       avatarDataUrl: avatarDataUrlDraft.value
     })
-    finishProfileEditor()
+    finishLogin()
   } catch {
-    uni.showToast({ title: t('account.profileSaveFailed'), icon: 'none' })
+    uni.showToast({ title: t('account.loginFailed'), icon: 'none' })
   } finally {
     savingProfile.value = false
   }
 }
 
-function skipProfile() {
-  finishProfileEditor()
+function cancelLogin() {
+  profileEditorVisible.value = false
+  pendingDestination.value = undefined
+  displayNameDraft.value = ''
+  avatarDataUrlDraft.value = undefined
 }
 
-function finishProfileEditor() {
+function finishLogin() {
   profileEditorVisible.value = false
   const destination = pendingDestination.value
   pendingDestination.value = undefined
@@ -227,11 +261,20 @@ function finishProfileEditor() {
   width: 100%;
   height: 100%;
 }
-.title {
+.identity-row {
+  display: flex;
+  align-items: baseline;
   margin-top: 16rpx;
+}
+.title {
   color: $singjourney-green-dark;
   font-size: 34rpx;
   font-weight: 700;
+}
+.guest-label {
+  margin-left: 4rpx;
+  color: #7b8e87;
+  font-size: 22rpx;
 }
 .profile-links {
   display: flex;

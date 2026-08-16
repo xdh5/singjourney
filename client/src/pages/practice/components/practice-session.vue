@@ -17,10 +17,7 @@
         class="canvas"
         :style="canvasStyle"
       />
-      <view class="legend">
-        <text class="legend-target">{{ t('practice.targetCurve') }}</text>
-        <text class="legend-user">{{ t('practice.voiceCurve') }}</text>
-      </view>
+      <recording-mode-tag :label="exerciseTitle" />
     </view>
 
     <view class="session-status">
@@ -35,40 +32,47 @@
       :play-label="status === 'playing' ? t('record.pause') : t('record.play')"
       :record-label="practiceRecordLabel"
       :save-label="t('record.save')"
-      :share-label="t('record.share')"
+      :share-label="sharing ? t('record.generating') : t('record.share')"
       :is-playing="status === 'playing'"
       :is-recording="isPractising"
       :playback-disabled="!canReplay"
       :record-disabled="!canStartOrStop"
-      :share-disabled="!canDownload"
+      :clear-disabled="!canUseCompletedRecording"
+      :save-disabled="!canUseCompletedRecording || saving || Boolean(savedRecordingId)"
+      :share-disabled="!canUseCompletedRecording || sharing"
       :show-share="true"
       @clear="clearPractice"
       @play="toggleReplay"
       @record="togglePracticeRecording"
+      @save="savePractice"
       @share="sharePractice"
     />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
-import { onShow, onUnload } from '@dcloudio/uni-app'
+import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import {
-  AudioFrameAccumulator,
-  PitchEngine,
-  pcm16ToFloat32
-} from '@singjourney/pitch-core'
-import { createCurveCommands } from '@singjourney/curve-layout'
 import type { StoredPitchPoint } from '@singjourney/contracts'
 import { createPitchCanvasSurface } from '../../../utils/pitch/canvas'
 import { createPcmPreview, deleteTemporaryAudio } from '../../../utils/audio/files'
-import { createRecordingAudioEncoder } from '../../../utils/audio/encoder'
-import { createPitchWorker } from '../../../utils/pitch/worker'
-import { exportAudio } from '../../../utils/share'
+import { configureHeadphonesAudioMode } from '../../../utils/audio/player'
+import { createPcmBuffer } from '../../../utils/audio/pcm-buffer'
+import { createLivePitchAnalysis } from '../../../utils/pitch/live-analysis'
+import {
+  calculateLivePitchCanvasLayout,
+  LIVE_PITCH_AXIS_WIDTH,
+  LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS,
+  LIVE_PITCH_COMMAND_RENDER_INTERVAL_MS,
+  LIVE_PITCH_PCM_RENDER_INTERVAL_MS,
+  LIVE_PITCH_PIXELS_PER_SECOND
+} from '../../../utils/pitch/layout'
+import { createAudioExportSession } from '../../../utils/share'
 import { getWindowMetrics } from '../../../utils/window-metrics'
 import RecordingToolbar from '../../../components/recording-toolbar.vue'
 import AppNavbar from '../../../components/app-navbar.vue'
+import RecordingModeTag from '../../../components/recording-mode-tag.vue'
 import { createPracticeAudioTransport } from '../../../utils/practice/audio-transport'
 import {
   connectRecorder,
@@ -86,13 +90,26 @@ import {
   releaseRecordingScreenAwake
 } from '../../../utils/recording/screen-awake'
 import type { PracticeManifest } from '../../../utils/practice/types'
+import { RECORDING_TYPE, storeRecording } from '../../../utils/recording/storage'
 import {
   createPracticeEventId,
   type CompletedPracticeEvent
 } from '../../../services/practice/statistics'
 import { drawPitchAxis, drawPitchGrid } from '../../../utils/pitch/renderer'
+import {
+  createLivePitchVisualClock,
+  drawLivePitchCurve,
+  drawLivePitchPlayhead,
+  LIVE_PITCH_PLAYHEAD_RATIO,
+  LIVE_PITCH_RENDER_DELAY_SECONDS,
+  PLAYBACK_OUTPUT_DELAY_SECONDS
+} from '../../../utils/pitch/live-curve'
 
-const props = defineProps<{ manifest: PracticeManifest }>()
+const props = defineProps<{
+  manifest: PracticeManifest
+  exerciseTitle: string
+  includeAccompanimentOnReplay: boolean
+}>()
 const emit = defineEmits<{ close: []; completed: [event: CompletedPracticeEvent] }>()
 const { t } = useI18n()
 const instance = getCurrentInstance()
@@ -107,19 +124,14 @@ type SessionStatus =
   | 'playing'
   | 'playbackPaused'
 
-const CANVAS_MINIMUM_HEIGHT = 320
-const SESSION_HEADER_HEIGHT_PX = 36
-const AXIS_WIDTH = 48
+const AXIS_WIDTH = LIVE_PITCH_AXIS_WIDTH
 const ROW_PADDING = 2
-const PIXELS_PER_SECOND = 72
-const PLAYHEAD_RATIO = 0.46
-const DIRECT_RENDER_INTERVAL_MS = 1000 / 60
-const PCM_RENDER_INTERVAL_MS = 1000 / 30
-const LEGACY_CANVAS_RENDER_INTERVAL_MS = 120
-const ANALYSIS_INTERVAL_MS = 80
-const PCM_BLOCK_SIZE = 64 * 1024
-const TIME_BAR_HEIGHT_RPX = 50
-const TOOLBAR_HEIGHT_RPX = 144
+const PIXELS_PER_SECOND = LIVE_PITCH_PIXELS_PER_SECOND
+const USER_PITCH_VIEW_PADDING = 2
+const USER_PITCH_MAXIMUM_EXPANSION = 12
+const DIRECT_RENDER_INTERVAL_MS = LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS
+const PCM_RENDER_INTERVAL_MS = LIVE_PITCH_PCM_RENDER_INTERVAL_MS
+const COMMAND_CANVAS_RENDER_INTERVAL_MS = LIVE_PITCH_COMMAND_RENDER_INTERVAL_MS
 
 const status = ref<SessionStatus>('ready')
 const position = ref(0)
@@ -127,35 +139,27 @@ const canvasWidth = ref(375)
 const canvasHeight = ref(480)
 const toolbarHeight = ref(72)
 const safeBottom = ref(0)
+const saving = ref(false)
+const sharing = ref(false)
 const userPoints: StoredPitchPoint[] = []
 const audioTransport = createPracticeAudioTransport()
-let engineSampleRate = recorderAnalysisConfig.sampleRate
-let engine = new PitchEngine({
-  sampleRate: recorderAnalysisConfig.sampleRate,
-  bufferSize: recorderAnalysisConfig.frameSize,
-  primaryDetector: 'yin',
-  fallbackDetector: true
-})
-const accumulator = new AudioFrameAccumulator(recorderAnalysisConfig.frameSize)
-
 let context: any = null
+const audioExportSession = createAudioExportSession()
 let directCanvas = false
 let commitCanvas = () => {}
 let canvasDrawQueued = false
-let pitchWorker: ReturnType<typeof createPitchWorker> = null
+let lastCanvasDiagnosticAt = 0
 let renderTimer: ReturnType<typeof setInterval> | undefined
-let lastAnalysisAt = 0
-let workerAnalysisStartedAt = 0
-let lastWorkerResultAt = 0
-let unvoicedFrames = 0
-let pcmBlocks: Uint8Array[] = []
-let pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
-let pcmBlockOffset = 0
-let pcmByteLength = 0
+const visualClock = createLivePitchVisualClock()
+const pcmBuffer = createPcmBuffer()
 let recordedPcmByteLength = 0
+let initialPreRollPcmByteLength = 0
+let replayVoiceOffsetSeconds = 0
+let initialRecordingGateOpened = false
 const recordingPath = ref('')
 let recordingBlob: Blob | undefined
 let temporaryPcmPreview = ''
+let pausedPreviewRequestId = 0
 let discardPendingRecording = false
 let recordingPausedAt = 0
 let replayReturnStatus: 'recordingPaused' | 'completed' = 'completed'
@@ -164,9 +168,25 @@ let recordingSessionOpen = false
 let completedEventSent = false
 let practiceEventId = ''
 let practiceStartedAt = ''
-const recordingAudioEncoder = createRecordingAudioEncoder({
-  enabled: () => recorderCapabilities.capturesPcmFrames,
-  worker: () => pitchWorker
+let sessionDisposed = false
+let pageVisible = true
+const savedRecordingId = ref('')
+const recordingCompleted = ref(false)
+const pitchAnalysis = createLivePitchAnalysis({
+  diagnosticLabel: '伴奏练声',
+  points: userPoints,
+  sampleRate: recorderAnalysisConfig.sampleRate,
+  frameSize: recorderAnalysisConfig.frameSize,
+  capturesPcmFrames: recorderCapabilities.capturesPcmFrames,
+  isActive: () => status.value === 'recording',
+  shouldCapture: () => status.value === 'preparing',
+  currentTime: currentCapturedPcmPosition,
+  onPcmFrame: (buffer) => {
+    recordedPcmByteLength += buffer.byteLength
+    if (!initialRecordingGateOpened && status.value === 'preparing')
+      initialPreRollPcmByteLength += buffer.byteLength
+    pcmBuffer.append(buffer)
+  }
 })
 
 const canvasStyle = computed(() => `width:${canvasWidth.value}px;height:${canvasHeight.value}px`)
@@ -180,9 +200,21 @@ const canReplay = computed(
     Boolean(recordingPath.value) &&
     ['recordingPaused', 'completed', 'playing', 'playbackPaused'].includes(status.value)
 )
-const canDownload = computed(
-  () => Boolean(recordingPath.value) && ['recordingPaused', 'completed'].includes(status.value)
+const canUseCompletedRecording = computed(
+  () => Boolean(recordingPath.value) && recordingCompleted.value
 )
+
+function currentCapturedPcmPosition() {
+  if (!recorderCapabilities.capturesPcmFrames) return currentPosition()
+  const capturedByteLength = Math.max(
+    0,
+    recordedPcmByteLength - initialPreRollPcmByteLength
+  )
+  return (
+    capturedByteLength /
+    (recorderAnalysisConfig.sampleRate * Int16Array.BYTES_PER_ELEMENT)
+  )
+}
 const canStartOrStop = computed(
   () =>
     ['ready', 'recording', 'recordingPaused'].includes(status.value) ||
@@ -206,7 +238,7 @@ const practiceRecordLabel = computed(() => {
 
 const disconnectRecorder = connectRecorder({
   onStart: () => {
-    void startAccompaniment()
+    if (pageVisible) void startAccompaniment()
   },
   onFrame: analyzeFrame,
   onStop: finishRecording,
@@ -221,21 +253,49 @@ const disconnectRecorder = connectRecorder({
 
 onMounted(initCanvas)
 onShow(() => {
-  if (status.value === 'recording') void keepScreenAwakeWhileRecording()
+  pageVisible = true
 })
+onHide(pausePageActivity)
 onUnload(cleanup)
+onUnmounted(cleanup)
+
+function pausePageActivity() {
+  pageVisible = false
+  if (sessionDisposed) return
+  if (status.value === 'recording') {
+    void pausePracticeSession()
+    return
+  }
+  if (status.value === 'playing') {
+    pausePracticeReplay()
+    return
+  }
+  if (status.value !== 'preparing') return
+
+  void releaseRecordingScreenAwake()
+  stopRenderTimer()
+  if (recordingSessionOpen || resumeRecorderOnGate || !recordingPath.value) {
+    recordingPausedAt = currentPosition()
+    position.value = recordingPausedAt
+    audioTransport.pausePractice()
+    if (recordingSessionOpen) pauseRecorder()
+    status.value = 'recordingPaused'
+    draw()
+    void refreshPausedPreview()
+    return
+  }
+  audioTransport.pauseReplay()
+  status.value = 'playbackPaused'
+  draw()
+}
 
 async function initCanvas() {
   const metrics = getWindowMetrics()
-  canvasWidth.value = Math.max(1, metrics.windowWidth)
-  safeBottom.value = metrics.safeBottom
-  toolbarHeight.value = uni.upx2px(TOOLBAR_HEIGHT_RPX) + safeBottom.value
-  const reservedHeight =
-    metrics.statusBarHeight +
-    SESSION_HEADER_HEIGHT_PX +
-    uni.upx2px(TIME_BAR_HEIGHT_RPX + TOOLBAR_HEIGHT_RPX) +
-    safeBottom.value
-  canvasHeight.value = Math.max(CANVAS_MINIMUM_HEIGHT, metrics.windowHeight - reservedHeight)
+  const layout = calculateLivePitchCanvasLayout(metrics)
+  canvasWidth.value = layout.canvasWidth
+  canvasHeight.value = layout.canvasHeight
+  safeBottom.value = layout.safeBottom
+  toolbarHeight.value = layout.toolbarHeight
   await nextTick()
   const surface = await createPitchCanvasSurface({
     id: 'practiceCanvas',
@@ -247,59 +307,50 @@ async function initCanvas() {
   context = surface.context
   directCanvas = surface.direct
   commitCanvas = surface.commit
-  initPitchWorker()
+  pitchAnalysis.initWorker()
   draw()
-}
-
-function initPitchWorker() {
-  if (pitchWorker || !recorderCapabilities.capturesPcmFrames) return
-  try {
-    pitchWorker = createPitchWorker(handlePitchWorkerMessage, disablePitchWorker)
-  } catch {
-    pitchWorker = null
-  }
-}
-
-function handlePitchWorkerMessage(message: any) {
-  if (recordingAudioEncoder.handleMessage(message)) return
-  if (message?.type === 'pitch-result') {
-    lastWorkerResultAt = Date.now()
-    if (status.value === 'recording' && message.result) handlePitchResult(message.result)
-  }
-}
-
-function disablePitchWorker() {
-  recordingAudioEncoder.fail()
-  pitchWorker?.terminate?.()
-  pitchWorker = null
 }
 
 async function startPractice() {
   if (status.value !== 'ready') return
+  invalidatePausedPreview()
+  savedRecordingId.value = ''
+  recordingCompleted.value = false
   status.value = 'preparing'
   position.value = 0
-  userPoints.splice(0)
-  resetPcm()
+  pcmBuffer.reset()
   recordedPcmByteLength = 0
-  workerAnalysisStartedAt = 0
-  lastWorkerResultAt = 0
-  lastAnalysisAt = 0
-  engine.reset()
-  accumulator.reset()
-  pitchWorker?.postMessage({ type: 'reset' })
+  initialPreRollPcmByteLength = 0
+  replayVoiceOffsetSeconds = 0
+  initialRecordingGateOpened = false
+  pitchAnalysis.reset()
+  let startStage = 'configureHeadphonesAudioMode'
   try {
+    // 微信在 RecorderManager 启动时会重新协商音频路由，开始录音前再次应用耳机模式。
+    await configureHeadphonesAudioMode(props.includeAccompanimentOnReplay)
+    startStage = 'prepareAccompaniment'
     await audioTransport.prepare(
       props.manifest.audioPath,
       props.manifest.audioOffset,
       props.manifest.duration
     )
+    startStage = 'requestMicrophonePermission'
     await requestMicrophonePermission()
-    await recordingAudioEncoder.start()
     resumeRecorderOnGate = recorderCapabilities.startsPausedForAudioGate
+    startStage = 'startRecorder'
     await startRecorder({ startPaused: recorderCapabilities.startsPausedForAudioGate })
     recordingSessionOpen = true
-  } catch {
-    recordingAudioEncoder.discard()
+    if (!pageVisible) {
+      recordingPausedAt = 0
+      position.value = 0
+      pauseRecorder()
+      status.value = 'recordingPaused'
+    }
+  } catch (error) {
+    console.error('[录音错误] 伴奏练声启动流程失败', {
+      stage: startStage,
+      rawError: error
+    })
     status.value = 'ready'
     uni.showModal({
       title: t('record.microphonePermissionTitle'),
@@ -324,6 +375,15 @@ async function startAccompaniment() {
 
 function openRecordingGate() {
   if (status.value !== 'preparing') return
+  console.info('[录音诊断] 伴奏已开始，准备打开录音门', {
+    resumeRecorderOnGate,
+    position: currentPosition()
+  })
+  if (!initialRecordingGateOpened) {
+    replayVoiceOffsetSeconds =
+      initialPreRollPcmByteLength / (recorderAnalysisConfig.sampleRate * Int16Array.BYTES_PER_ELEMENT)
+    initialRecordingGateOpened = true
+  }
   if (!practiceEventId) {
     practiceEventId = createPracticeEventId()
     practiceStartedAt = new Date().toISOString()
@@ -367,6 +427,8 @@ function togglePracticeRecording() {
 
 async function pausePracticeSession() {
   if (status.value !== 'recording') return
+  const pauseStartedAt = Date.now()
+  console.info('[录音诊断] 伴奏练声开始暂停')
   recordingPausedAt = currentPosition()
   position.value = recordingPausedAt
   audioTransport.pausePractice()
@@ -376,10 +438,15 @@ async function pausePracticeSession() {
   stopRenderTimer()
   draw()
   await refreshPausedPreview()
+  console.info('[录音诊断] 伴奏练声暂停全部完成', {
+    elapsedMs: Date.now() - pauseStartedAt
+  })
 }
 
 function resumePracticeSession() {
   if (status.value !== 'recordingPaused' && status.value !== 'playbackPaused') return
+  invalidatePausedPreview()
+  console.info('[录音诊断] 从暂停或回放切回继续录音', { status: status.value })
   audioTransport.stop()
   status.value = 'preparing'
   position.value = recordingPausedAt
@@ -397,134 +464,56 @@ function resumePracticeSession() {
 }
 
 async function refreshPausedPreview() {
+  const requestId = ++pausedPreviewRequestId
   try {
-    const encodedPreviewPath = await recordingAudioEncoder.createPreview()
-    if (encodedPreviewPath) {
-      deleteTemporaryAudio(temporaryPcmPreview)
-      temporaryPcmPreview = encodedPreviewPath
-      recordingPath.value = encodedPreviewPath
-      recordingBlob = undefined
-      return
-    }
     let previewPath = ''
     let previewBlob: Blob | undefined
     if (
       recorderCapabilities.capturesPcmFrames &&
-      pcmByteLength > 0 &&
-      pcmByteLength === recordedPcmByteLength
+      pcmBuffer.byteLength > 0 &&
+      pcmBuffer.byteLength === recordedPcmByteLength
     ) {
-      previewPath = await createPcmPreview(getPcmChunks(), pcmByteLength)
+      previewPath = await createPcmPreview(pcmBuffer.chunks(), pcmBuffer.byteLength)
     } else if (recorderCapabilities.startsPausedForAudioGate) {
       const preview = await createPausedRecorderPreview()
       previewPath = preview?.tempFilePath || ''
       previewBlob = preview?.blob
     }
-    if (!previewPath || status.value !== 'recordingPaused') {
+    if (
+      !previewPath ||
+      requestId !== pausedPreviewRequestId ||
+      status.value !== 'recordingPaused'
+    ) {
       deleteTemporaryAudio(previewPath)
+      if (previewPath)
+        console.info('[录音诊断] 丢弃已经过期的伴奏练声暂停预览', { requestId })
       return
     }
     deleteTemporaryAudio(temporaryPcmPreview)
     temporaryPcmPreview = previewPath
     recordingPath.value = previewPath
     recordingBlob = previewBlob
+    void audioTransport.prepareReplay(previewPath).catch(() => {})
   } catch {
+    if (requestId !== pausedPreviewRequestId || status.value !== 'recordingPaused') return
     uni.showToast({ title: t('record.previewFailed'), icon: 'none' })
   }
 }
 
-function appendPcm(buffer: ArrayBuffer) {
-  const source = new Uint8Array(buffer)
-  let sourceOffset = 0
-  while (sourceOffset < source.length) {
-    const writable = Math.min(source.length - sourceOffset, PCM_BLOCK_SIZE - pcmBlockOffset)
-    pcmBlock.set(source.subarray(sourceOffset, sourceOffset + writable), pcmBlockOffset)
-    pcmBlockOffset += writable
-    pcmByteLength += writable
-    sourceOffset += writable
-    if (pcmBlockOffset === PCM_BLOCK_SIZE) {
-      pcmBlocks.push(pcmBlock)
-      pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
-      pcmBlockOffset = 0
-    }
-  }
-}
-
-function resetPcm() {
-  pcmBlocks = []
-  pcmBlock = new Uint8Array(PCM_BLOCK_SIZE)
-  pcmBlockOffset = 0
-  pcmByteLength = 0
-}
-
-function getPcmChunks() {
-  return pcmBlockOffset > 0 ? [...pcmBlocks, pcmBlock.subarray(0, pcmBlockOffset)] : pcmBlocks
+function invalidatePausedPreview() {
+  pausedPreviewRequestId += 1
 }
 
 function analyzeFrame(
   buffer: ArrayBuffer | Float32Array,
   sampleRate = recorderAnalysisConfig.sampleRate
 ) {
-  if (status.value !== 'recording') return
-  if (recorderCapabilities.capturesPcmFrames) {
-    if (!(buffer instanceof ArrayBuffer)) return
-    recordedPcmByteLength += buffer.byteLength
-    appendPcm(buffer)
-    if (pitchWorker) {
-      const now = Date.now()
-      if (!workerAnalysisStartedAt) workerAnalysisStartedAt = now
-      try {
-        pitchWorker.postMessage({
-          type: 'analyze',
-          buffer,
-          sampleRate,
-          time: currentPosition()
-        })
-      } catch {
-        disablePitchWorker()
-      }
-      const workerResponsive = lastWorkerResultAt
-        ? now - lastWorkerResultAt < 1200
-        : now - workerAnalysisStartedAt < 1200
-      if (pitchWorker && workerResponsive) return
-      disablePitchWorker()
-    }
-  }
-  const now = Date.now()
-  if (now - lastAnalysisAt < ANALYSIS_INTERVAL_MS) return
-  lastAnalysisAt = now
-  if (sampleRate !== engineSampleRate) {
-    engineSampleRate = sampleRate
-    engine = new PitchEngine({
-      sampleRate: engineSampleRate,
-      bufferSize: recorderAnalysisConfig.frameSize,
-      primaryDetector: 'yin',
-      fallbackDetector: true
-    })
-    accumulator.reset()
-  }
-  const samples = buffer instanceof Float32Array ? buffer : pcm16ToFloat32(buffer)
-  accumulator.push(samples, (frame: Float32Array) => {
-    const result = engine.analyze(frame, currentPosition())
-    if (result) handlePitchResult(result)
-  })
-}
-
-function handlePitchResult(result: {
-  time: number
-  midi: number | null
-  confidence: number
-  voiced: boolean
-}) {
-  if (result.voiced && result.midi !== null) {
-    unvoicedFrames = 0
-    userPoints.push({ time: result.time, midi: result.midi, confidence: result.confidence })
-  } else if (++unvoicedFrames === 3) {
-    userPoints.push({ time: result.time, midi: null, confidence: 0 })
-  }
+  pitchAnalysis.analyze(buffer, sampleRate)
 }
 
 function endPractice() {
   if (status.value !== 'recording' && status.value !== 'preparing') return
+  invalidatePausedPreview()
   position.value = Math.min(props.manifest.duration, currentPosition())
   audioTransport.stop()
   status.value = 'finishing'
@@ -538,30 +527,29 @@ async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
   if (discardPendingRecording) {
     discardPendingRecording = false
     deleteTemporaryAudio(result.tempFilePath)
-    recordingAudioEncoder.discard()
-    resetPcm()
+    pcmBuffer.reset()
     recordedPcmByteLength = 0
     return
   }
   if (temporaryPcmPreview && temporaryPcmPreview !== result.tempFilePath)
     deleteTemporaryAudio(temporaryPcmPreview)
   temporaryPcmPreview = ''
-  let fallbackPath = result.tempFilePath
+  let fallbackPath = ''
   if (
     recorderCapabilities.capturesPcmFrames &&
-    pcmByteLength > 0 &&
-    pcmByteLength === recordedPcmByteLength
+    pcmBuffer.byteLength > 0 &&
+    pcmBuffer.byteLength === recordedPcmByteLength
   ) {
-    fallbackPath = await createPcmPreview(getPcmChunks(), pcmByteLength)
+    fallbackPath = await createPcmPreview(pcmBuffer.chunks(), pcmBuffer.byteLength)
     deleteTemporaryAudio(result.tempFilePath)
   }
-  recordingPath.value = await recordingAudioEncoder.finalize(fallbackPath)
+  recordingPath.value = fallbackPath || result.tempFilePath
   recordingBlob = result.blob
-  resetPcm()
+  pcmBuffer.reset()
   recordedPcmByteLength = 0
-  workerAnalysisStartedAt = 0
-  lastWorkerResultAt = 0
   status.value = 'completed'
+  recordingCompleted.value = true
+  void audioTransport.prepareReplay(recordingPath.value).catch(() => {})
   position.value = props.manifest.duration
   draw()
   if (!completedEventSent && practiceEventId && practiceStartedAt) {
@@ -579,12 +567,9 @@ async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
 
 function toggleReplay() {
   if (!canReplay.value) return
+  console.info('[录音诊断] 点击回放按钮', { status: status.value })
   if (status.value === 'playing') {
-    position.value = currentPosition()
-    audioTransport.pauseReplay()
-    status.value = 'playbackPaused'
-    stopRenderTimer()
-    draw()
+    pausePracticeReplay()
     return
   }
   if (status.value === 'playbackPaused') {
@@ -596,6 +581,7 @@ function toggleReplay() {
     replayReturnStatus === 'recordingPaused' ? recordingPausedAt : props.manifest.duration
   position.value = 0
   status.value = 'preparing'
+  draw()
   void audioTransport
     .startReplay(
       recordingPath.value,
@@ -607,9 +593,20 @@ function toggleReplay() {
         onEnded: completeReplay,
         onError: failReplay
       },
-      replayEnd
+      replayEnd,
+      replayVoiceOffsetSeconds,
+      props.includeAccompanimentOnReplay
     )
     .catch(failReplay)
+}
+
+function pausePracticeReplay() {
+  if (status.value !== 'playing') return
+  position.value = currentPosition()
+  audioTransport.pauseReplay()
+  status.value = 'playbackPaused'
+  stopRenderTimer()
+  draw()
 }
 
 function completeReplay() {
@@ -628,6 +625,8 @@ function failReplay() {
 }
 
 function clearPractice() {
+  if (!canUseCompletedRecording.value) return
+  invalidatePausedPreview()
   void releaseRecordingScreenAwake()
   audioTransport.stop()
   stopRenderTimer()
@@ -641,29 +640,65 @@ function clearPractice() {
   recordingBlob = undefined
   position.value = 0
   userPoints.splice(0)
-  recordingAudioEncoder.discard()
-  resetPcm()
+  pcmBuffer.reset()
   recordedPcmByteLength = 0
-  engine.reset()
-  accumulator.reset()
-  pitchWorker?.postMessage({ type: 'reset' })
+  pitchAnalysis.reset()
   status.value = 'ready'
   completedEventSent = false
   practiceEventId = ''
   practiceStartedAt = ''
+  savedRecordingId.value = ''
+  recordingCompleted.value = false
+  saving.value = false
   draw()
 }
 
-async function sharePractice() {
-  if (!canDownload.value) return
+async function savePractice() {
+  if (!canUseCompletedRecording.value || saving.value || savedRecordingId.value) return
+  saving.value = true
   try {
-    const result = await exportAudio({
-      filePath: recordingPath.value,
-      name: t('practice.exercises.mumOctave.title')
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    await storeRecording({
+      tempFilePath: recordingPath.value,
+      blob: recordingBlob,
+      recording: {
+        id,
+        name: props.exerciseTitle,
+        duration: props.manifest.duration,
+        audioOffset: replayVoiceOffsetSeconds,
+        createdAt: new Date().toISOString(),
+        pointCount: userPoints.length,
+        points: [...userPoints],
+        recordingType: RECORDING_TYPE.ACCOMPANIED_PRACTICE
+      }
+    })
+    savedRecordingId.value = id
+    uni.showToast({ title: t('record.saved'), icon: 'success' })
+  } catch {
+    uni.showToast({ title: t('record.saveFailed'), icon: 'none' })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function sharePractice() {
+  if (!canUseCompletedRecording.value || sharing.value) return
+  const sourcePath = recordingPath.value
+  sharing.value = true
+  try {
+    const exportPrepared = audioExportSession.isPrepared(sourcePath)
+    if (!exportPrepared) await pitchAnalysis.releaseWorkerSlot()
+    const result = await audioExportSession.run({
+      key: sourcePath,
+      filePath: sourcePath,
+      name: props.exerciseTitle
     })
     if (result === 'cancelled') return
-  } catch {
+  } catch (error) {
+    console.error('[音频导出] 伴奏练声分享失败', error)
     uni.showToast({ title: t('record.exportFailed'), icon: 'none' })
+  } finally {
+    sharing.value = false
   }
 }
 
@@ -673,11 +708,12 @@ function currentPosition() {
 
 function startRenderTimer() {
   stopRenderTimer()
+  visualClock.reset(position.value)
   const interval = recorderCapabilities.capturesPcmFrames
     ? PCM_RENDER_INTERVAL_MS
     : directCanvas
       ? DIRECT_RENDER_INTERVAL_MS
-      : LEGACY_CANVAS_RENDER_INTERVAL_MS
+      : COMMAND_CANVAS_RENDER_INTERVAL_MS
   renderTimer = setInterval(() => {
     position.value = currentPosition()
     draw()
@@ -700,15 +736,34 @@ function draw() {
 
 function drawCanvas() {
   if (!context) return
+  const drawStartedAt = Date.now()
   const ctx = context
   const width = canvasWidth.value
   const height = canvasHeight.value
   const plotWidth = width - AXIS_WIDTH
-  const minimumMidi = props.manifest.range.minimumMidi - ROW_PADDING
-  const maximumMidi = props.manifest.range.maximumMidi + ROW_PADDING
-  const rowHeight = height / (maximumMidi - minimumMidi + 1)
-  const viewStart = Math.max(0, position.value - (plotWidth * PLAYHEAD_RATIO) / PIXELS_PER_SECOND)
+  const targetDisplayPosition =
+    status.value === 'recording'
+      ? Math.max(0, position.value - LIVE_PITCH_RENDER_DELAY_SECONDS)
+      : status.value === 'playing'
+        ? Math.max(0, position.value - PLAYBACK_OUTPUT_DELAY_SECONDS)
+        : position.value
+  const displayPosition = visualClock.update(
+    targetDisplayPosition,
+    status.value === 'recording' || status.value === 'playing'
+  )
+  const viewStart =
+    displayPosition - (plotWidth * LIVE_PITCH_PLAYHEAD_RATIO) / PIXELS_PER_SECOND
   const viewEnd = viewStart + plotWidth / PIXELS_PER_SECOND
+  const visibleUserRange = findVisibleUserRange(viewStart, viewEnd)
+  const minimumMidi = Math.min(
+    props.manifest.range.minimumMidi - ROW_PADDING,
+    visibleUserRange.minimumMidi - USER_PITCH_VIEW_PADDING
+  )
+  const maximumMidi = Math.max(
+    props.manifest.range.maximumMidi + ROW_PADDING,
+    visibleUserRange.maximumMidi + USER_PITCH_VIEW_PADDING
+  )
+  const rowHeight = height / (maximumMidi - minimumMidi + 1)
 
   const pitchLayer = {
     context: ctx,
@@ -732,31 +787,45 @@ function drawCanvas() {
     ctx.fillRect(x, y, Math.max(2, endX - x), Math.max(3, rowHeight * 0.52))
   }
 
-  const commands = createCurveCommands(userPoints, {
+  drawLivePitchCurve({
+    context: ctx,
+    direct: directCanvas,
+    points: userPoints,
     startTime: viewStart,
+    endTime: viewEnd,
     width: plotWidth,
     pixelsPerSecond: PIXELS_PER_SECOND,
-    maxMidi: maximumMidi,
-    rowHeight
+    maximumMidi,
+    rowHeight,
+    showLatestPoint: status.value === 'recording',
+    liveTime: status.value === 'recording' ? displayPosition : undefined
   })
-  setStroke(ctx, '#356b5b', 2.5)
-  ctx.beginPath()
-  for (const command of commands) {
-    if (command.type === 'move') ctx.moveTo(command.x, command.y)
-    else if (command.type === 'line') ctx.lineTo(command.x, command.y)
-    else if (command.type === 'quad') ctx.quadraticCurveTo(command.cx, command.cy, command.x, command.y)
-  }
-  ctx.stroke()
 
-  const playheadX = (position.value - viewStart) * PIXELS_PER_SECOND
-  setStroke(ctx, '#1f4e41', 1.5)
-  ctx.beginPath()
-  ctx.moveTo(playheadX, 0)
-  ctx.lineTo(playheadX, height)
-  ctx.stroke()
+  const playheadX = (displayPosition - viewStart) * PIXELS_PER_SECOND
+  drawLivePitchPlayhead({ context: ctx, direct: directCanvas, x: playheadX, height })
 
   drawPitchAxis(pitchLayer)
   commitCanvas()
+  logCanvasTiming(drawStartedAt)
+}
+
+function logCanvasTiming(drawStartedAt: number) {
+  const now = Date.now()
+  if (now - lastCanvasDiagnosticAt < 1000) return
+  lastCanvasDiagnosticAt = now
+  const pcmPosition = currentCapturedPcmPosition()
+  const accompanimentPosition = currentPosition()
+  const latestPoint = userPoints[userPoints.length - 1]
+  console.info('[曲线诊断] 伴奏练声', {
+    canvasDrawMs: now - drawStartedAt,
+    pcmPosition: Number(pcmPosition.toFixed(3)),
+    accompanimentPosition: Number(accompanimentPosition.toFixed(3)),
+    clockDriftMs: Math.round((pcmPosition - accompanimentPosition) * 1000),
+    latestPointLagMs: latestPoint
+      ? Math.round((accompanimentPosition - latestPoint.time) * 1000)
+      : undefined,
+    pointCount: userPoints.length
+  })
 }
 
 function setFill(ctx: any, color: string) {
@@ -774,6 +843,22 @@ function setStroke(ctx: any, color: string, width: number) {
   }
 }
 
+function findVisibleUserRange(viewStart: number, viewEnd: number) {
+  let minimumMidi = props.manifest.range.minimumMidi
+  let maximumMidi = props.manifest.range.maximumMidi
+  const lowerLimit = minimumMidi - USER_PITCH_MAXIMUM_EXPANSION
+  const upperLimit = maximumMidi + USER_PITCH_MAXIMUM_EXPANSION
+  for (let index = userPoints.length - 1; index >= 0; index -= 1) {
+    const point = userPoints[index]
+    if (point.time < viewStart - 0.25) break
+    if (point.time > viewEnd || point.midi === null) continue
+    const midi = Math.max(lowerLimit, Math.min(upperLimit, point.midi))
+    minimumMidi = Math.min(minimumMidi, midi)
+    maximumMidi = Math.max(maximumMidi, midi)
+  }
+  return { minimumMidi, maximumMidi }
+}
+
 function formatTime(seconds: number) {
   const whole = Math.max(0, Math.floor(seconds))
   return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
@@ -785,6 +870,9 @@ function closeSession() {
 }
 
 function cleanup() {
+  if (sessionDisposed) return
+  sessionDisposed = true
+  invalidatePausedPreview()
   void releaseRecordingScreenAwake()
   stopRenderTimer()
   if (recordingSessionOpen) {
@@ -792,9 +880,7 @@ function cleanup() {
     stopRecorder()
   }
   disconnectRecorder()
-  recordingAudioEncoder.discard()
-  pitchWorker?.terminate?.()
-  pitchWorker = null
+  pitchAnalysis.terminate()
   audioTransport.destroy()
   deleteTemporaryAudio(temporaryPcmPreview)
   if (recordingPath.value !== temporaryPcmPreview) deleteTemporaryAudio(recordingPath.value)
@@ -821,39 +907,21 @@ function cleanup() {
   left: 0;
   display: block;
 }
-.legend {
-  position: absolute;
-  z-index: 2;
-  top: 16rpx;
-  left: 18rpx;
-  display: flex;
-  gap: 10rpx;
-}
-.legend-target,
-.legend-user {
-  padding: 7rpx 12rpx;
-  border-radius: 999rpx;
-  font-size: 18rpx;
-}
-.legend-target {
-  color: #356b5b;
-  background: rgba(217, 238, 230, 0.92);
-}
-.legend-user {
-  color: #fff;
-  background: rgba(53, 107, 91, 0.92);
-}
 .session-status {
+  position: relative;
   display: flex;
   height: 50rpx;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 0 24rpx;
   color: #fff;
   background: #356b5b;
   font-size: 21rpx;
 }
 .session-time {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   font-variant-numeric: tabular-nums;
   font-weight: 800;
 }

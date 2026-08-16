@@ -9,28 +9,18 @@
       v-if="selectionMode"
       class="selection-placeholder"
     >
-      <view
-        class="recording-checkbox"
-        :class="{ checked: selected }"
-        >✓</view
-      >
+      <app-icon
+        :name="selected ? 'checkbox-checked' : 'checkbox-empty'"
+        :size="20"
+      />
     </view>
-    <view
-      v-else
-      class="play-button"
-      ><uni-icons
-        type="forward"
-        :size="22"
-        color="#ffffff"
-    /></view>
+    <view v-else class="play-button">
+      <app-icon name="play" :size="22" tone="white" />
+    </view>
     <view class="recording-copy">
       <text class="recording-name">{{ name }}</text>
       <view class="recording-date-row">
-        <uni-icons
-          type="calendar"
-          :size="16"
-          color="#4e555f"
-        />
+        <app-icon name="calendar" :size="15" tone="muted" />
         <text class="recording-date">{{ date }}</text>
       </view>
     </view>
@@ -42,11 +32,7 @@
         :aria-label="moreLabel"
         @tap.stop="!selectionMode && emit('menu')"
       >
-        <uni-icons
-          type="more-filled"
-          :size="24"
-          color="#4e555f"
-        />
+        <app-icon name="more" :size="21" tone="muted" />
       </view>
       <text class="recording-duration">{{ duration }}</text>
     </view>
@@ -54,6 +40,8 @@
 </template>
 
 <script setup lang="ts">
+import AppIcon from '../../../components/app-icon.vue'
+
 defineProps<{
   name: string
   date: string
@@ -105,24 +93,6 @@ const emit = defineEmits<{ select: []; menu: [] }>()
   height: 76rpx;
   align-items: center;
   justify-content: center;
-}
-.recording-checkbox {
-  display: flex;
-  width: 40rpx;
-  height: 40rpx;
-  align-items: center;
-  justify-content: center;
-  border: 2rpx solid $singjourney-green;
-  border-radius: 50%;
-  box-sizing: border-box;
-  color: transparent;
-  font-size: 27rpx;
-  font-weight: 900;
-  line-height: 1;
-}
-.recording-checkbox.checked {
-  color: #fff;
-  background: $singjourney-green;
 }
 .recording-copy {
   display: grid;

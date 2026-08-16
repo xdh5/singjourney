@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_structured_logging
 from app.core.release import get_api_major, get_server_version
 from app.db.session import engine
+from app.db.bootstrap import initialize_database
 
 
 configure_structured_logging()
@@ -19,11 +21,18 @@ settings = get_settings()
 server_version = get_server_version()
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initialize_database()
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     version=server_version,
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,

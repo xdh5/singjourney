@@ -10,10 +10,10 @@
       mode="aspectFill"
     />
     <view class="record-recommendation">
-      <uni-icons
-        type="star-filled"
+      <app-icon
+        name="favorite"
         :size="15"
-        color="#f7e779"
+        tone="yellow"
       />
       <text class="recommendation-label">{{ t('home.recommended') }}</text>
     </view>
@@ -22,7 +22,7 @@
       <text class="record-description">{{ description }}</text>
     </view>
     <view class="practice-progress">
-      <text class="progress-icon">↗</text>
+      <app-icon name="trend-up" :size="14" tone="accent" />
       <text class="progress-label">{{ t('home.todayPracticedPrefix') }}</text>
       <text class="progress-value">{{ todayMinutes }}</text>
       <text class="progress-unit">{{ t('home.minutesUnit') }}</text>
@@ -32,7 +32,8 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import dailyPracticeHero from '../../../assets/home/daily-practice-hero-v2.jpg'
+import AppIcon from '../../../components/app-icon.vue'
+import dailyPracticeHero from '../../../assets/home/daily-practice-hero.jpg'
 
 defineProps<{ description: string; todayMinutes: number }>()
 const emit = defineEmits<{ select: [] }>()
@@ -116,13 +117,6 @@ const { t } = useI18n()
   color: #fff;
   background: rgba(8, 112, 78, 0.84);
   box-shadow: 0 8rpx 20rpx rgba(0, 37, 25, 0.18);
-}
-.progress-icon {
-  margin-right: 2rpx;
-  color: #18e49c;
-  font-size: 24rpx;
-  font-weight: 900;
-  line-height: 1;
 }
 .progress-label,
 .progress-unit {

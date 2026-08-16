@@ -5,41 +5,29 @@
     @tap="emit('select')"
   >
     <view class="link-icon">
-      <view
-        v-if="icon === 'statistics'"
-        class="statistics-icon"
-        aria-hidden="true"
-      >
-        <view class="statistics-bar short" />
-        <view class="statistics-bar medium" />
-        <view class="statistics-bar tall" />
-        <view class="statistics-bar middle" />
-      </view>
-      <uni-icons
-        v-else
-        :type="icon"
+      <app-icon
+        :name="icon"
         :size="24"
-        color="#0f4d3b"
       />
     </view>
     <view class="link-copy">
       <text class="link-title">{{ title }}</text>
       <text class="link-description">{{ description }}</text>
     </view>
-    <uni-icons
-      type="right"
-      :size="20"
-      color="#789088"
-    />
+    <app-icon v-if="showChevron" name="right" :size="16" tone="muted" />
   </view>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  icon: string
+import AppIcon from '../../../components/app-icon.vue'
+import type { AppIconName } from '../../../components/app-icon'
+
+withDefaults(defineProps<{
+  icon: AppIconName
   title: string
   description: string
-}>()
+  showChevron?: boolean
+}>(), { showChevron: true })
 
 const emit = defineEmits<{ select: [] }>()
 </script>
@@ -67,37 +55,6 @@ const emit = defineEmits<{ select: [] }>()
   justify-content: center;
   border-radius: 22rpx;
   background: #e4f3ec;
-}
-
-.statistics-icon {
-  display: flex;
-  width: 38rpx;
-  height: 38rpx;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 4rpx;
-}
-
-.statistics-bar {
-  width: 6rpx;
-  border-radius: 5rpx 5rpx 2rpx 2rpx;
-  background: $singjourney-green-dark;
-}
-
-.statistics-bar.short {
-  height: 15rpx;
-}
-
-.statistics-bar.medium {
-  height: 25rpx;
-}
-
-.statistics-bar.tall {
-  height: 36rpx;
-}
-
-.statistics-bar.middle {
-  height: 21rpx;
 }
 
 .link-copy {

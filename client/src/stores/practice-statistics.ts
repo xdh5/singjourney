@@ -1,21 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
-  EMPTY_PRACTICE_STATISTICS,
+  createEmptyPracticeStatistics,
   fetchPracticeStatistics,
-  flushPendingPracticeEvents,
   type PracticeStatisticsView
 } from '../services/practice/statistics'
 
 export const usePracticeStatisticsStore = defineStore('practice-statistics', () => {
-  const statistics = ref<PracticeStatisticsView>({ ...EMPTY_PRACTICE_STATISTICS })
+  const statistics = ref<PracticeStatisticsView>(createEmptyPracticeStatistics())
   const loading = ref(false)
 
   async function refresh() {
     if (loading.value) return
     loading.value = true
     try {
-      await flushPendingPracticeEvents()
       statistics.value = await fetchPracticeStatistics()
     } finally {
       loading.value = false
@@ -23,7 +21,7 @@ export const usePracticeStatisticsStore = defineStore('practice-statistics', () 
   }
 
   function reset() {
-    statistics.value = { ...EMPTY_PRACTICE_STATISTICS }
+    statistics.value = createEmptyPracticeStatistics()
     loading.value = false
   }
 

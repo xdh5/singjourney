@@ -22,11 +22,6 @@ FROM dependencies AS source
 COPY client client
 COPY packages packages
 
-# DCloud 的微信编译器要求 easycom 组件位于客户端自己的 node_modules，
-# 否则 npm workspace 提升依赖后会生成非法的 ../node-modules 输出路径。
-RUN mkdir -p client/node_modules/@dcloudio \
-    && cp -a node_modules/@dcloudio/uni-ui client/node_modules/@dcloudio/uni-ui
-
 FROM source AS quality
 
 CMD ["npm", "run", "lint", "-w", "@singjourney/client"]

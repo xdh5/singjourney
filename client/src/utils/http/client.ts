@@ -51,7 +51,24 @@ export function requestJson<T>(path: string, options: HttpRequestOptions = {}) {
 }
 
 export function resolveApiUrl(path: string) {
-  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-  const baseUrl = configuredBaseUrl || DEFAULT_API_BASE_URL
+  const baseUrl = configuredApiBaseUrl()
   return `${baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
+}
+
+export function apiStorageKey(name: string) {
+  const namespace = hashStorageNamespace(configuredApiBaseUrl().toLowerCase().replace(/\/$/, ''))
+  return `singjourney.${name}.${namespace}`
+}
+
+function configuredApiBaseUrl() {
+  return import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
+}
+
+function hashStorageNamespace(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
 }

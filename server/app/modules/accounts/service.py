@@ -41,6 +41,8 @@ def login_with_wechat_code(
     settings: Settings,
     code: str,
     locale: str | None,
+    display_name: str | None,
+    avatar_data_url: str | None,
 ) -> IssuedSession:
     """Exchange a one-time WeChat code, upsert its identity, and issue an opaque session."""
     openid = _exchange_code(settings, code)
@@ -57,7 +59,11 @@ def login_with_wechat_code(
         if locale and user.locale != locale:
             user.locale = locale
     else:
-        user = User(locale=locale)
+        user = User(
+            locale=locale,
+            display_name=display_name.strip() if display_name else None,
+            avatar_data_url=avatar_data_url,
+        )
         db.add(user)
         db.flush()
         db.add(
@@ -104,11 +110,14 @@ def update_profile(
     user: User,
     display_name: str | None,
     avatar_data_url: str | None,
+    preferred_voice_preset: str | None,
 ) -> User:
-    if display_name is not None:
+    if display_name is not None and user.display_name is None:
         user.display_name = display_name.strip()
-    if avatar_data_url is not None:
+    if avatar_data_url is not None and user.avatar_data_url is None:
         user.avatar_data_url = avatar_data_url
+    if preferred_voice_preset is not None:
+        user.preferred_voice_preset = preferred_voice_preset
     db.commit()
     db.refresh(user)
     return user

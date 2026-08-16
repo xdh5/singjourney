@@ -14,12 +14,9 @@
       role="button"
       @tap="!clearDisabled && emit('clear')"
     >
-      <view class="tool-icon"
-        ><uni-icons
-          type="trash-filled"
-          :size="21"
-          color="#356b5b"
-      /></view>
+        <view class="tool-icon">
+          <app-icon name="delete" :size="21" />
+        </view>
       <text>{{ clearLabel }}</text>
     </view>
 
@@ -29,12 +26,9 @@
       role="button"
       @tap="!playbackDisabled && emit('play')"
     >
-      <view class="tool-icon"
-        ><uni-icons
-          :type="isPlaying ? 'minus-filled' : 'forward'"
-          :size="21"
-          color="#356b5b"
-      /></view>
+        <view class="tool-icon">
+          <app-icon :name="isPlaying ? 'pause' : 'play'" :size="21" />
+        </view>
       <text>{{ playLabel }}</text>
     </view>
 
@@ -45,12 +39,13 @@
       role="button"
       @tap="!recordDisabled && emit('record')"
     >
-      <view class="tool-icon primary"
-        ><uni-icons
-          :type="isRecording ? 'minus-filled' : 'mic-filled'"
-          :size="23"
-          color="#ffffff"
-      /></view>
+        <view class="tool-icon primary">
+          <app-icon
+            :name="isRecording ? 'pause' : 'microphone'"
+            :size="23"
+            tone="white"
+          />
+        </view>
       <text>{{ recordLabel }}</text>
     </view>
 
@@ -61,12 +56,9 @@
       role="button"
       @tap="!saveDisabled && emit('save')"
     >
-      <view class="tool-icon"
-        ><uni-icons
-          type="download-filled"
-          :size="21"
-          color="#356b5b"
-      /></view>
+        <view class="tool-icon">
+          <app-icon name="save" :size="21" />
+        </view>
       <text>{{ saveLabel }}</text>
     </view>
 
@@ -77,12 +69,9 @@
       role="button"
       @tap="!shareDisabled && emit('share')"
     >
-      <view class="tool-icon"
-        ><uni-icons
-          type="redo-filled"
-          :size="21"
-          color="#356b5b"
-      /></view>
+        <view class="tool-icon">
+          <app-icon name="share" :size="21" />
+        </view>
       <text>{{ shareLabel }}</text>
     </view>
   </view>
@@ -90,6 +79,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from './app-icon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -153,7 +143,7 @@ const emit = defineEmits<{
   align-items: start;
   justify-content: center;
   column-gap: 28rpx;
-  padding-top: 13rpx;
+  padding-top: 7rpx;
   border-top: 1px solid #d3e2dc;
   background: #fff;
   box-sizing: border-box;
@@ -162,12 +152,12 @@ const emit = defineEmits<{
   position: relative;
   display: flex;
   width: 76rpx;
-  height: 118rpx;
+  height: 96rpx;
   min-width: 0;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 5rpx;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -175,14 +165,14 @@ const emit = defineEmits<{
   border-radius: 0;
   color: #58766c;
   background: transparent;
-  font-size: 21rpx;
+  font-size: 19rpx;
   font-weight: 500;
   line-height: 1;
 }
 .tool-icon {
   display: flex;
-  width: 66rpx;
-  height: 66rpx;
+  width: 58rpx;
+  height: 58rpx;
   align-items: center;
   justify-content: center;
   border: 1px solid #c9ddd5;

@@ -23,6 +23,7 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(80))
     avatar_data_url: Mapped[str | None] = mapped_column(Text)
     locale: Mapped[str | None] = mapped_column(String(16))
+    preferred_voice_preset: Mapped[str | None] = mapped_column(String(8))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 

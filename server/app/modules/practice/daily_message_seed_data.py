@@ -1,15 +1,4 @@
-"""Store the bilingual daily-practice messages."""
-
-import sqlalchemy as sa
-from alembic import op
-
-from app.modules.practice.models import DailyPracticeMessage
-
-
-revision = "20260815_0005"
-down_revision = "20260720_0001"
-branch_labels = None
-depends_on = None
+"""Current bilingual daily-practice seed data."""
 
 
 MESSAGES = [
@@ -44,14 +33,3 @@ MESSAGES = [
     ("认真对待声音，它会给你新的惊喜", "Treat your voice with care, and it will surprise you."),
     ("坚持练下去，好声音正在路上等你", "Keep practicing; a better voice is waiting down the road."),
 ]
-
-
-def upgrade() -> None:
-    op.bulk_insert(DailyPracticeMessage.__table__, [
-        {"id": index, "content_zh_hans": zh, "content_en": en, "active": True}
-        for index, (zh, en) in enumerate(MESSAGES, start=1)
-    ])
-
-
-def downgrade() -> None:
-    op.get_bind().execute(sa.text("DELETE FROM daily_practice_messages"))

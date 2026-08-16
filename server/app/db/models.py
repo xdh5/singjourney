@@ -1,4 +1,4 @@
-"""Single import point used by Alembic to register every table."""
+"""Single import point that registers every table with SQLAlchemy metadata."""
 
 from app.modules.accounts.models import AuthIdentity, AuthSession, User
 from app.modules.evaluations.models import Evaluation, EvaluationDimension
