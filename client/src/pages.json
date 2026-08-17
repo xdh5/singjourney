@@ -23,6 +23,10 @@
     {
       "path": "pages/practice-stats/index",
       "style": { "navigationStyle": "custom", "navigationBarTitleText": "%nav.practiceStats%" }
+    },
+    {
+      "path": "pages/voiceprint-agreement/index",
+      "style": { "navigationStyle": "custom", "navigationBarTitleText": "%voiceprintConsent.title%" }
     }
   ],
   "globalStyle": {

@@ -146,7 +146,6 @@ const activeManifest = ref<PracticeManifest | null>(null)
 const activeExerciseTitle = ref('')
 const PRACTICE_SCREEN_AWAKE_OWNER = 'practice-page'
 let voicePreferenceUpdate = Promise.resolve()
-let currentPageInstance: unknown
 
 const visibleExercises = computed(() =>
   selectedCategory.value === 'favorites'
@@ -164,7 +163,6 @@ void catalogStore.refresh().catch(() => {})
 
 onShow(() => {
   void keepScreenAwakeWhilePageOpen(PRACTICE_SCREEN_AWAKE_OWNER)
-  currentPageInstance = currentTopPage()
   setPageTitle('nav.practice')
   const serverVoice = session.value?.user.preferred_voice_preset
   if (isVoicePreset(serverVoice)) {
@@ -175,17 +173,9 @@ onShow(() => {
 })
 
 onHide(() => {
-  const hiddenPage = currentPageInstance
-  setTimeout(() => {
-    if (currentTopPage() !== hiddenPage) resetPageSession()
-  }, 0)
+  void releasePageScreenAwake(PRACTICE_SCREEN_AWAKE_OWNER)
 })
 onUnload(resetPageSession)
-
-function currentTopPage() {
-  const pages = getCurrentPages()
-  return pages[pages.length - 1]
-}
 
 function resetPageSession() {
   void releasePageScreenAwake(PRACTICE_SCREEN_AWAKE_OWNER)

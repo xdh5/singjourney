@@ -27,6 +27,7 @@
   },
   "mp-weixin": {
     "appid": "touristappid",
+    "__usePrivacyCheck__": true,
     "lazyCodeLoading": "requiredComponents",
     "workers": "static/workers",
     "setting": { "urlCheck": false },

@@ -47,6 +47,12 @@
       @save="savePractice"
       @share="sharePractice"
     />
+    <voiceprint-consent-sheet
+      :visible="voiceprintConsentVisible"
+      @agree="acceptVoiceprintConsent"
+      @decline="declineVoiceprintConsent"
+      @open="openVoiceprintAgreement"
+    />
   </view>
 </template>
 
@@ -73,6 +79,7 @@ import { getWindowMetrics } from '../../../utils/window-metrics'
 import RecordingToolbar from '../../../components/recording-toolbar.vue'
 import AppNavbar from '../../../components/app-navbar.vue'
 import RecordingModeTag from '../../../components/recording-mode-tag.vue'
+import VoiceprintConsentSheet from '../../../components/voiceprint-consent-sheet.vue'
 import { createPracticeAudioTransport } from '../../../utils/practice/audio-transport'
 import {
   connectRecorder,
@@ -91,6 +98,10 @@ import {
 } from '../../../utils/recording/screen-awake'
 import type { PracticeManifest } from '../../../utils/practice/types'
 import { RECORDING_TYPE, storeRecording } from '../../../utils/recording/storage'
+import {
+  hasVoiceprintConsent,
+  setVoiceprintConsent
+} from '../../../utils/recording/voiceprint-consent'
 import {
   createPracticeEventId,
   type CompletedPracticeEvent
@@ -172,6 +183,7 @@ let sessionDisposed = false
 let pageVisible = true
 const savedRecordingId = ref('')
 const recordingCompleted = ref(false)
+const voiceprintConsentVisible = ref(false)
 const pitchAnalysis = createLivePitchAnalysis({
   diagnosticLabel: '伴奏练声',
   points: userPoints,
@@ -313,6 +325,10 @@ async function initCanvas() {
 
 async function startPractice() {
   if (status.value !== 'ready') return
+  if (!hasVoiceprintConsent()) {
+    voiceprintConsentVisible.value = true
+    return
+  }
   invalidatePausedPreview()
   savedRecordingId.value = ''
   recordingCompleted.value = false
@@ -358,6 +374,23 @@ async function startPractice() {
       showCancel: false
     })
   }
+}
+
+function acceptVoiceprintConsent() {
+  setVoiceprintConsent(true)
+  voiceprintConsentVisible.value = false
+  void startPractice()
+}
+
+function declineVoiceprintConsent() {
+  setVoiceprintConsent(false)
+  voiceprintConsentVisible.value = false
+}
+
+function openVoiceprintAgreement() {
+  uni.navigateTo({
+    url: '/pages/voiceprint-agreement/index?returnTo=%2Fpages%2Fpractice%2Findex'
+  })
 }
 
 async function startAccompaniment() {

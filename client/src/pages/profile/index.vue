@@ -206,7 +206,21 @@ async function confirmLogin() {
       avatarDataUrl: avatarDataUrlDraft.value
     })
     finishLogin()
-  } catch {
+  } catch (error) {
+    const detail = error as {
+      name?: string
+      message?: string
+      errMsg?: string
+      statusCode?: number
+      responseData?: unknown
+    }
+    console.error('[登录错误] 微信登录失败', {
+      name: detail?.name,
+      message: detail?.message || detail?.errMsg,
+      statusCode: detail?.statusCode,
+      responseData: detail?.responseData,
+      rawError: error
+    })
     uni.showToast({ title: t('account.loginFailed'), icon: 'none' })
   } finally {
     savingProfile.value = false

@@ -53,6 +53,12 @@
       @save="saveRecording"
       @share="shareRecording"
     />
+    <voiceprint-consent-sheet
+      :visible="voiceprintConsentVisible"
+      @agree="acceptVoiceprintConsent"
+      @decline="declineVoiceprintConsent"
+      @open="openVoiceprintAgreement"
+    />
   </view>
 </template>
 
@@ -63,6 +69,7 @@ import { useI18n } from 'vue-i18n'
 import AppNavbar from '../../components/app-navbar.vue'
 import RecordingToolbar from '../../components/recording-toolbar.vue'
 import RecordingModeTag from '../../components/recording-mode-tag.vue'
+import VoiceprintConsentSheet from '../../components/voiceprint-consent-sheet.vue'
 import {
   MAX_RECORDING_DURATION_SECONDS,
   RECORDING_DURATION_WARNING_AT_SECONDS,
@@ -136,6 +143,10 @@ import {
   releaseRecordingScreenAwake
 } from '../../utils/recording/screen-awake'
 import {
+  hasVoiceprintConsent,
+  setVoiceprintConsent
+} from '../../utils/recording/voiceprint-consent'
+import {
   captureClientError,
   createTelemetryId,
   TELEMETRY_EVENT,
@@ -167,6 +178,7 @@ const hasStarted = ref(false)
 const saving = ref(false)
 const sharing = ref(false)
 const isPlaying = ref(false)
+const voiceprintConsentVisible = ref(false)
 const playablePath = ref('')
 const timeLabel = ref('00:00')
 const playbackPosition = ref(0)
@@ -251,7 +263,6 @@ let durationLimitHandled = false
 let telemetryRecordingId = ''
 let recordingCompletionTracked = false
 let pageDisposed = false
-let currentPageInstance: unknown
 const pitchAnalysis = createLivePitchAnalysis({
   diagnosticLabel: '自由练声',
   points,
@@ -389,7 +400,6 @@ onMounted(async () => {
 })
 onLoad(loadRecordingDetail)
 onShow(() => {
-  currentPageInstance = currentTopPage()
   if (pageDisposed) {
     uni.navigateBack({ delta: 1 })
     return
@@ -398,17 +408,9 @@ onShow(() => {
 })
 onHide(() => {
   pausePageActivity()
-  const hiddenPage = currentPageInstance
-  setTimeout(() => {
-    if (currentTopPage() !== hiddenPage) disposePage()
-  }, 0)
+  void releasePageScreenAwake(RECORD_SCREEN_AWAKE_OWNER)
 })
 onUnload(disposePage)
-
-function currentTopPage() {
-  const pages = getCurrentPages()
-  return pages[pages.length - 1]
-}
 
 function pausePageActivity() {
   if (pageDisposed) return
@@ -502,6 +504,10 @@ async function initCanvas() {
 
 async function toggleRecording() {
   if (recordingDetailMode.value) return
+  if (!hasStarted.value && !hasVoiceprintConsent()) {
+    voiceprintConsentVisible.value = true
+    return
+  }
   const playbackStateBeforeRecordingAction = {
     isPlaying: isPlaying.value,
     playbackStarting,
@@ -584,6 +590,23 @@ async function toggleRecording() {
   clearTimer()
   timer = setInterval(updateClock, 100)
   startRenderTimer()
+}
+
+function acceptVoiceprintConsent() {
+  setVoiceprintConsent(true)
+  voiceprintConsentVisible.value = false
+  void toggleRecording()
+}
+
+function declineVoiceprintConsent() {
+  setVoiceprintConsent(false)
+  voiceprintConsentVisible.value = false
+}
+
+function openVoiceprintAgreement() {
+  uni.navigateTo({
+    url: '/pages/voiceprint-agreement/index?returnTo=%2Fpages%2Frecord%2Findex'
+  })
 }
 
 async function pauseActiveRecording(trackPause: boolean) {

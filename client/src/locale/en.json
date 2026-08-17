@@ -247,6 +247,27 @@
     "freePractice": "Free Practice",
     "noData": "No data"
   },
+  "voiceprintConsent": {
+    "title": "Voice Data Authorization Agreement",
+    "readAndAgree": "I have read and agree to",
+    "applicationName": "SingJourney Request",
+    "permissionTitle": "Process your voice information",
+    "permissionDescription": "For local recording and real-time pitch analysis",
+    "decline": "Decline",
+    "allow": "Allow",
+    "updatedAt": "Updated: August 17, 2026",
+    "introduction": "This agreement explains how SingJourney handles your voice information in the pitch meter and practice recording features. Please decide whether to agree after reviewing it.",
+    "section1Title": "1. Purpose and scope",
+    "section1Content": "SingJourney accesses your microphone only for real-time pitch analysis, practice recording, playback, and saving or sharing initiated by you.",
+    "section2Title": "2. Processing",
+    "section2Content": "Audio and pitch analysis are processed locally on your device and are not uploaded to SingJourney servers. They are not used for identity recognition, and no voiceprint identification template is extracted or created.",
+    "section3Title": "3. Storage and sharing",
+    "section3Content": "Recordings and pitch data remain only on the current device until you delete them, clear Mini Program data, or remove the relevant client. Audio is passed to WeChat for sharing only when you initiate that action.",
+    "section4Title": "4. Declining or withdrawing",
+    "section4Content": "You may decline this agreement, clear the checkbox, or disable microphone access in WeChat settings. You cannot start a new recording after declining or withdrawing, but other features such as browsing remain available.",
+    "section5Title": "5. Your rights",
+    "section5Content": "You may view or delete saved content from the recordings page at any time. Clearing Mini Program data also removes local recordings and the stored agreement record."
+  },
   "share": {
     "loading": "Loading share…",
     "loadingAudio": "Loading audio",

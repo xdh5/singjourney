@@ -43,6 +43,18 @@ services:
       args:
         CLIENT_BUILD_SCRIPT: build:client:wx
         MINI_PROGRAM_APP_ID: ${SINGJOURNEY_MINI_PROGRAM_APP_ID:-touristappid}
+        API_BASE_URL: https://singjourney.com/api/v1
+    volumes:
+      - ../client/dist/mp-weixin:/output
+
+  client-build-wx-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+      target: wx-output
+      args:
+        CLIENT_BUILD_SCRIPT: build:client:wx
+        MINI_PROGRAM_APP_ID: ${SINGJOURNEY_MINI_PROGRAM_APP_ID:-touristappid}
         API_BASE_URL: ${SINGJOURNEY_CLIENT_API_BASE_URL:-http://127.0.0.1:8000/api/v1}
     volumes:
       - ../client/dist/mp-weixin:/output

@@ -42,23 +42,30 @@ export function getStoredAuthSession(): StoredAuthSession | null {
 }
 
 export async function loginWithWeChat(locale: string, profile: UserProfileUpdate) {
-  const code = await requestWeChatLoginCode()
-  const response = await requestJson<LoginResponse>('/auth/wechat/login', {
-    method: 'POST',
-    data: {
-      code,
-      locale,
-      display_name: profile.displayName,
-      avatar_data_url: profile.avatarDataUrl
+  let stage = 'wx.login'
+  try {
+    const code = await requestWeChatLoginCode()
+    stage = 'POST /auth/wechat/login'
+    const response = await requestJson<LoginResponse>('/auth/wechat/login', {
+      method: 'POST',
+      data: {
+        code,
+        locale,
+        display_name: profile.displayName,
+        avatar_data_url: profile.avatarDataUrl
+      }
+    })
+    const session: StoredAuthSession = {
+      accessToken: response.access_token,
+      expiresAt: response.expires_at,
+      user: response.user
     }
-  })
-  const session: StoredAuthSession = {
-    accessToken: response.access_token,
-    expiresAt: response.expires_at,
-    user: response.user
+    uni.setStorageSync(AUTH_SESSION_STORAGE_KEY, session)
+    return session
+  } catch (error) {
+    console.error('[登录错误] 登录流程中断', { stage, rawError: error })
+    throw error
   }
-  uni.setStorageSync(AUTH_SESSION_STORAGE_KEY, session)
-  return session
 }
 
 export function clearStoredAuthSession() {

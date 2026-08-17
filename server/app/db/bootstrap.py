@@ -19,6 +19,9 @@ def initialize_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
+    if "avatar_data_url" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN avatar_data_url TEXT"))
     if "preferred_voice_preset" not in user_columns:
         with engine.begin() as connection:
             connection.execute(

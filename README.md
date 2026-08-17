@@ -55,13 +55,19 @@ npm 与 Docker 客户端构建统一使用 `https://registry.npmmirror.com`。
 
 在项目根目录执行。
 
-日常构建微信小程序：
+构建用于上传发布的微信小程序（固定连接正式接口）：
 
 ```powershell
 docker compose -f docker/compose.client.yml run --build --rm client-build-wx
 ```
 
-产物写入 `client/dist/mp-weixin`，微信开发者工具保持打开该目录即可。该命令不构建 Web、iOS 或 Android。
+本地联调微信小程序（从 `.env` 读取 `SINGJOURNEY_CLIENT_API_BASE_URL`）：
+
+```powershell
+docker compose --env-file .env -f docker/compose.client.yml run --build --rm client-build-wx-dev
+```
+
+两条命令的产物都写入 `client/dist/mp-weixin`，微信开发者工具保持打开该目录即可。正式构建不再读取本地接口地址，避免把局域网地址打进发布包；两条命令均不构建 Web、iOS 或 Android。
 
 构建 Web、App 和微信小程序：
 

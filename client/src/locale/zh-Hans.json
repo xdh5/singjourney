@@ -247,6 +247,27 @@
     "freePractice": "自由练声",
     "noData": "暂无数据"
   },
+  "voiceprintConsent": {
+    "title": "声纹授权协议",
+    "readAndAgree": "我已阅读并同意",
+    "applicationName": "声刻度 申请",
+    "permissionTitle": "处理你的声音信息",
+    "permissionDescription": "用于本地录音与实时音高分析",
+    "decline": "拒绝",
+    "allow": "允许",
+    "updatedAt": "更新日期：2026年8月17日",
+    "introduction": "本协议用于说明声刻度在音调仪和练声录音功能中如何处理您的声音信息。请在充分理解后自主决定是否同意。",
+    "section1Title": "一、处理目的与范围",
+    "section1Content": "声刻度通过麦克风采集您的声音，仅用于实时音高分析、练声录制、录音回放，以及由您主动发起的保存或分享。",
+    "section2Title": "二、处理方式",
+    "section2Content": "声音和音高分析均在您的设备本地完成，不上传至声刻度服务器，不用于身份识别，也不会提取或建立声纹识别模板。",
+    "section3Title": "三、存储与分享",
+    "section3Content": "录音及音高数据仅保存在当前设备本地，保留至您主动删除、清除小程序数据或卸载相关客户端。仅当您主动使用分享功能时，相关录音才会按您的操作交由微信完成分享。",
+    "section4Title": "四、拒绝与撤回",
+    "section4Content": "您可以拒绝同意本协议，也可以取消勾选或在微信设置中关闭麦克风权限。拒绝或撤回后将无法开始新的录音，但不影响浏览等其他功能。",
+    "section5Title": "五、您的权利",
+    "section5Content": "您可以随时在录音记录中查看或删除已保存内容。清除小程序数据后，本地录音和本协议的同意记录也会一并清除。"
+  },
   "share": {
     "loading": "正在加载分享…",
     "loadingAudio": "音频加载中",
