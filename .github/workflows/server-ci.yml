@@ -67,11 +67,11 @@ jobs:
 
       - name: Compile Python sources
         working-directory: server
-        run: python -m compileall -q app migrations
+        run: python -m compileall -q app
 
-      - name: Apply database migrations
+      - name: Initialize database
         working-directory: server
-        run: alembic upgrade head
+        run: python -c "from app.db.bootstrap import initialize_database; initialize_database()"
 
   image:
     runs-on: ubuntu-latest
