@@ -11,9 +11,9 @@ from app.modules.practice.constants import (
     MIDI_TICKS_PER_BEAT,
     OPUS_BITRATE,
     PIANO_CUE_DURATION_BEATS,
-    PIANO_NOTE_DURATION_BEATS,
     RENDER_SAMPLE_RATE,
     master_accompaniment_filename,
+    piano_note_duration_beats_for,
 )
 from app.modules.practice.score import PracticeScore
 
@@ -54,7 +54,12 @@ def _write_midi(score: PracticeScore, output_path: Path) -> None:
         (event.start, event.midi, MIDI_CUE_VELOCITY, PIANO_CUE_DURATION_BEATS)
         for event in score.cue_notes
     ] + [
-        (event.start, event.midi, MIDI_GUIDE_VELOCITY, PIANO_NOTE_DURATION_BEATS)
+        (
+            event.start,
+            event.midi,
+            MIDI_GUIDE_VELOCITY,
+            piano_note_duration_beats_for(score.exercise_key),
+        )
         for event in score.target_notes
     ]
     previous_end_ticks = 0

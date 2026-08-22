@@ -1,6 +1,12 @@
 name: singjourney
 
 services:
+  practice-assets:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+      target: practice-assets
+
   client-lint:
     build:
       context: ..

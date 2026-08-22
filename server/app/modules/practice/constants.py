@@ -13,17 +13,20 @@ class PracticeExerciseDefinition:
     exercise_key: str
     tempo_bpm: int
     pattern: tuple[int, ...]
+    guide_note_beats: float = 0.45
+    piano_note_duration_beats: float = 0.1848
 
 
 FIVE_NOTE_PATTERN = (0, 2, 4, 5, 7, 5, 4, 2, 0)
 OCTAVE_ARPEGGIO_PATTERN = (0, 4, 7, 12, 7, 4, 0)
 OCTAVE_REPEAT_FOUR_PATTERN = (0, 4, 7, 12, 12, 12, 12, 7, 4, 0)
+OCTAVE_GLIDE_PATTERN = (0, 12, 0)
 
 _PRACTICE_EXERCISE_DEFINITIONS = (
     PracticeExerciseDefinition("natural-lip-trill-five", 72, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("natural-tongue-trill-five", 72, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("natural-hum-five", 68, FIVE_NOTE_PATTERN),
-    PracticeExerciseDefinition("natural-ng-octave-glide", 66, (0, 12, 0)),
+    PracticeExerciseDefinition("natural-ng-octave-glide", 66, OCTAVE_GLIDE_PATTERN),
     PracticeExerciseDefinition("natural-v-five", 70, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("natural-vowel-five", 72, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("connection-gug-five", 76, FIVE_NOTE_PATTERN),
@@ -38,7 +41,7 @@ _PRACTICE_EXERCISE_DEFINITIONS = (
         80,
         (0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 14, 12, 11, 9, 7, 5, 4, 2, 0),
     ),
-    PracticeExerciseDefinition("register-woo-octave-glide", 66, (0, 12, 0)),
+    PracticeExerciseDefinition("register-woo-octave-glide", 66, OCTAVE_GLIDE_PATTERN),
     PracticeExerciseDefinition("register-ng-ah-octave", 70, OCTAVE_ARPEGGIO_PATTERN),
     PracticeExerciseDefinition("register-mum-fifth-octave", 72, (0, 7, 12, 7, 0)),
     PracticeExerciseDefinition("register-noo-descending-octave", 74, (12, 11, 9, 7, 5, 4, 2, 0)),
@@ -60,7 +63,28 @@ _PRACTICE_EXERCISE_DEFINITIONS = (
     PracticeExerciseDefinition("mix-mum-tenth", 76, (0, 4, 7, 12, 16, 12, 7, 4, 0)),
 )
 
-# 相同音型只使用一个标准速度，确保伴奏内容和缓存文件真正共用。
+# 每种完整音型独立登记时值，同音型的全部练习共用配置。
+_PATTERN_TIMINGS: dict[tuple[int, ...], tuple[float, float]] = {
+    FIVE_NOTE_PATTERN: (0.45, 0.1848),
+    OCTAVE_GLIDE_PATTERN: (1.25, 1.1),
+    OCTAVE_ARPEGGIO_PATTERN: (0.45, 0.1848),
+    OCTAVE_REPEAT_FOUR_PATTERN: (0.45, 0.1848),
+    (0, 0, 0, 4, 4, 4, 7, 7, 7, 4, 0): (0.45, 0.1848),
+    (0, 7, 7, 7, 0): (0.45, 0.1848),
+    (0, 4, 7, 7, 7, 4, 0): (0.45, 0.1848),
+    (0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 14, 12, 11, 9, 7, 5, 4, 2, 0): (0.45, 0.1848),
+    (0, 7, 12, 7, 0): (0.45, 0.1848),
+    (12, 11, 9, 7, 5, 4, 2, 0): (0.45, 0.1848),
+    (0, 4, 7, 12, 16, 19, 16, 12, 7, 4, 0): (0.45, 0.1848),
+    (0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0): (0.45, 0.1848),
+    (24, 23, 21, 19, 17, 16, 14, 12, 11, 9, 7, 5, 4, 2, 0): (0.45, 0.1848),
+    (0, 4, 2, 5, 4, 7, 5, 9, 7, 11, 9, 12): (0.45, 0.1848),
+    (0, 1, 2, 3, 4, 3, 2, 1, 0): (0.45, 0.1848),
+    (0, 4, 7, 12, 12, 12, 7, 4, 0): (0.45, 0.1848),
+    (0, 4, 7, 12, 16, 12, 7, 4, 0): (0.45, 0.1848),
+}
+
+# 其余相同音型沿用原来的标准速度和共享伴奏策略。
 _STANDARD_PATTERN_TEMPOS = {
     FIVE_NOTE_PATTERN: 72,
     OCTAVE_ARPEGGIO_PATTERN: 76,
@@ -74,18 +98,17 @@ PRACTICE_EXERCISE_DEFINITIONS = tuple(
             _STANDARD_PATTERN_TEMPOS.get(definition.pattern, definition.tempo_bpm),
         ),
         definition.pattern,
+        *_PATTERN_TIMINGS[definition.pattern],
     )
     for definition in _PRACTICE_EXERCISE_DEFINITIONS
 )
 PRACTICE_EXERCISES_BY_KEY = {
     definition.exercise_key: definition for definition in PRACTICE_EXERCISE_DEFINITIONS
 }
-PRACTICE_ASSET_VERSION = 7
+PRACTICE_ASSET_VERSION = 14
 
 PHRASE_LEAD_IN_SECONDS = 1.0
 CUE_REST_BEATS = 1.0
-GUIDE_NOTE_BEATS = 0.45
-PIANO_NOTE_DURATION_BEATS = 0.1848
 PIANO_CUE_DURATION_BEATS = 0.45
 MIDI_TICKS_PER_BEAT = 480
 MIDI_PIANO_PROGRAM = 1
@@ -121,8 +144,8 @@ def master_accompaniment_filename(exercise_key: str) -> str:
         definition.pattern,
         PHRASE_LEAD_IN_SECONDS,
         CUE_REST_BEATS,
-        GUIDE_NOTE_BEATS,
-        PIANO_NOTE_DURATION_BEATS,
+        definition.guide_note_beats,
+        definition.piano_note_duration_beats,
         PIANO_CUE_DURATION_BEATS,
         MIDI_PIANO_PROGRAM,
         MIDI_GUIDE_VELOCITY,
@@ -134,3 +157,15 @@ def master_accompaniment_filename(exercise_key: str) -> str:
     )
     digest = sha256(repr(render_signature).encode("utf-8")).hexdigest()[:16]
     return f"accompaniment-{digest}.opus"
+
+
+def guide_note_beats_for(exercise_key: str) -> float:
+    """返回指定练习每个目标音占用的拍数。"""
+
+    return PRACTICE_EXERCISES_BY_KEY[exercise_key].guide_note_beats
+
+
+def piano_note_duration_beats_for(exercise_key: str) -> float:
+    """返回指定练习中钢琴引导音的持续拍数。"""
+
+    return PRACTICE_EXERCISES_BY_KEY[exercise_key].piano_note_duration_beats

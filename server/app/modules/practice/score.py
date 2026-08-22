@@ -2,13 +2,13 @@ from dataclasses import dataclass
 
 from app.modules.practice.constants import (
     CUE_REST_BEATS,
-    GUIDE_NOTE_BEATS,
     MASTER_PIANO_RANGE,
     PHRASE_LEAD_IN_SECONDS,
     PIANO_CUE_DURATION_BEATS,
     PRACTICE_ASSET_VERSION,
     PRACTICE_EXERCISES_BY_KEY,
     VOICE_PLAYBACK_RANGES,
+    guide_note_beats_for,
 )
 
 
@@ -53,6 +53,7 @@ def build_practice_master_score(exercise_key: str) -> PracticeScore:
     cursor_seconds = 0.0
     cue_duration_seconds = PIANO_CUE_DURATION_BEATS * seconds_per_beat
     cue_rest_seconds = CUE_REST_BEATS * seconds_per_beat
+    guide_note_seconds = guide_note_beats_for(exercise_key) * seconds_per_beat
     cues: list[CueNoteEvent] = []
     events: list[TargetNoteEvent] = []
 
@@ -62,7 +63,7 @@ def build_practice_master_score(exercise_key: str) -> PracticeScore:
         cursor_seconds += cue_duration_seconds + cue_rest_seconds
         for offset in definition.pattern:
             start = cursor_seconds
-            cursor_seconds += GUIDE_NOTE_BEATS * seconds_per_beat
+            cursor_seconds += guide_note_seconds
             events.append(TargetNoteEvent(
                 start=round(start, 6),
                 end=round(cursor_seconds, 6),
