@@ -3,10 +3,11 @@ from pathlib import Path
 
 from app.modules.practice.constants import (
     PRACTICE_EXERCISE_DEFINITIONS,
-    master_accompaniment_filename,
+    VOICE_PLAYBACK_RANGES,
+    accompaniment_filename,
 )
 from app.modules.practice.renderer import render_practice_score
-from app.modules.practice.score import build_practice_master_score
+from app.modules.practice.score import build_practice_master_score, build_practice_round_trip_score
 
 
 def main() -> None:
@@ -16,11 +17,22 @@ def main() -> None:
     args = parser.parse_args()
     rendered_filenames: set[str] = set()
     for definition in PRACTICE_EXERCISE_DEFINITIONS:
-        filename = master_accompaniment_filename(definition.exercise_key)
-        if filename in rendered_filenames:
+        if definition.progression_mode == "round_trip":
+            for voice in VOICE_PLAYBACK_RANGES:
+                filename = accompaniment_filename(definition.exercise_key, voice)
+                if filename in rendered_filenames:
+                    continue
+                render_practice_score(
+                    build_practice_round_trip_score(definition.exercise_key, voice),
+                    args.output,
+                    args.soundfont,
+                )
+                rendered_filenames.add(filename)
             continue
-        render_practice_score(build_practice_master_score(definition.exercise_key), args.output, args.soundfont)
-        rendered_filenames.add(filename)
+        filename = accompaniment_filename(definition.exercise_key, "male")
+        if filename not in rendered_filenames:
+            render_practice_score(build_practice_master_score(definition.exercise_key), args.output, args.soundfont)
+            rendered_filenames.add(filename)
 
 
 if __name__ == "__main__":

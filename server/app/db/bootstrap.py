@@ -42,6 +42,7 @@ def initialize_database() -> None:
             seed_practice_catalog(session)
         else:
             synchronize_practice_tempos(session)
+            synchronize_practice_catalog(session)
 
 
 def seed_practice_catalog(session) -> None:
@@ -82,3 +83,38 @@ def synchronize_practice_tempos(session) -> None:
         exercise = session.get(PracticeExercise, exercise_key)
         if exercise is not None:
             exercise.tempo = definition.tempo_bpm
+
+
+def synchronize_practice_catalog(session) -> None:
+    """将新增的内置练习补充到已有曲库。"""
+
+    existing_exercise_ids = set(session.scalars(select(PracticeExercise.id)))
+    for index, row in enumerate(EXERCISES, start=1):
+        exercise_id, primary_category = row[0], row[1]
+        if exercise_id in existing_exercise_ids:
+            continue
+        session.add(
+            PracticeExercise(
+                id=exercise_id,
+                title_zh_hans=row[2],
+                title_en=row[3],
+                tip_zh_hans=row[4],
+                tip_en=row[5],
+                pattern=row[6],
+                recommended_syllables=row[7],
+                tempo=PRACTICE_EXERCISES_BY_KEY[exercise_id].tempo_bpm,
+                repetitions=row[9],
+                intensity=row[10],
+                enabled=True,
+                sort_order=index * 10,
+            )
+        )
+        category_keys = (primary_category, *EXTRA_TAGS.get(exercise_id, ()))
+        for tag_index, category_key in enumerate(dict.fromkeys(category_keys)):
+            session.add(
+                PracticeExerciseCategory(
+                    exercise_id=exercise_id,
+                    category_key=category_key,
+                    sort_order=tag_index * 10,
+                )
+            )

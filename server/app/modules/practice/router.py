@@ -13,7 +13,8 @@ from app.modules.practice.constants import (
     MAXIMUM_TIMEZONE_OFFSET_MINUTES,
     MINIMUM_TIMEZONE_OFFSET_MINUTES,
     PRACTICE_EXERCISES_BY_KEY,
-    master_accompaniment_filename,
+    VOICE_PLAYBACK_RANGES,
+    accompaniment_filename,
 )
 from app.modules.practice.schemas import (
     PracticeSessionCreateRequest,
@@ -41,7 +42,7 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 @router.get(
     "/exercises/{exercise_id}/manifest",
     response_model=PracticeManifestResponse,
-    summary="Read a voice-specific segment of the shared accompaniment",
+    summary="读取指定声线的练习伴奏",
 )
 def get_practice_manifest(
     exercise_id: str,
@@ -49,7 +50,7 @@ def get_practice_manifest(
 ) -> PracticeManifestResponse:
     if exercise_id not in PRACTICE_EXERCISES_BY_KEY:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise has no accompaniment")
-    filename = master_accompaniment_filename(exercise_id)
+    filename = accompaniment_filename(exercise_id, voice)
     return PracticeManifestResponse.model_validate(
         build_practice_manifest(
             exercise_id,
@@ -65,8 +66,9 @@ def get_practice_asset(
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
     available_filenames = {
-        master_accompaniment_filename(exercise_key)
+        accompaniment_filename(exercise_key, voice)
         for exercise_key in PRACTICE_EXERCISES_BY_KEY
+        for voice in VOICE_PLAYBACK_RANGES
     }
     if filename not in available_filenames:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice asset not found")

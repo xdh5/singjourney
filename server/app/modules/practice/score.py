@@ -84,10 +84,28 @@ def build_practice_master_score(exercise_key: str) -> PracticeScore:
 
 
 def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> dict[str, object]:
-    """Slice a voice preset from one shared C3-F5 master accompaniment."""
+    """生成指定声线的练习播放清单。"""
 
     if voice not in VOICE_PLAYBACK_RANGES:
         raise ValueError(f"Unsupported voice preset: {voice}")
+    definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
+    if definition.progression_mode == "round_trip":
+        score = build_practice_round_trip_score(exercise_key, voice)
+        range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
+        return {
+            "exercise_key": score.exercise_key,
+            "version": score.version,
+            "voice": voice,
+            "tempo_bpm": score.tempo_bpm,
+            "range": {"minimum_midi": range_start, "maximum_midi": range_end},
+            "duration": score.duration,
+            "audio_path": audio_path,
+            "audio_offset": 0,
+            "target_notes": [
+                {"start": note.start, "end": note.end, "midi": note.midi}
+                for note in score.target_notes
+            ],
+        }
     score = build_practice_master_score(exercise_key)
     pattern = PRACTICE_EXERCISES_BY_KEY[exercise_key].pattern
     range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
@@ -134,3 +152,57 @@ def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> d
             for note in notes
         ],
     }
+
+
+def build_practice_round_trip_score(exercise_key: str, voice: str) -> PracticeScore:
+    """构建从声线低端上行到高端、再完整回行的独立乐谱。"""
+
+    if voice not in VOICE_PLAYBACK_RANGES:
+        raise ValueError(f"Unsupported voice preset: {voice}")
+    definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
+    range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
+    highest_root = range_end - max(definition.pattern)
+    ascending_roots = list(range(range_start, highest_root + 1))
+    phrase_roots = ascending_roots + list(range(highest_root - 1, range_start - 1, -1))
+    return _build_practice_score(definition, voice, range_start, range_end, phrase_roots)
+
+
+def _build_practice_score(
+    definition,
+    voice: str,
+    range_start: int,
+    range_end: int,
+    phrase_roots: list[int],
+) -> PracticeScore:
+    """按给定根音顺序建立完整练习乐谱。"""
+
+    seconds_per_beat = 60 / definition.tempo_bpm
+    cursor_seconds = 0.0
+    cue_duration_seconds = PIANO_CUE_DURATION_BEATS * seconds_per_beat
+    cue_rest_seconds = CUE_REST_BEATS * seconds_per_beat
+    guide_note_seconds = guide_note_beats_for(definition.exercise_key) * seconds_per_beat
+    cues: list[CueNoteEvent] = []
+    events: list[TargetNoteEvent] = []
+    for phrase_root in phrase_roots:
+        cursor_seconds += PHRASE_LEAD_IN_SECONDS
+        cues.append(CueNoteEvent(start=round(cursor_seconds, 6), midi=phrase_root))
+        cursor_seconds += cue_duration_seconds + cue_rest_seconds
+        for offset in definition.pattern:
+            start = cursor_seconds
+            cursor_seconds += guide_note_seconds
+            events.append(TargetNoteEvent(
+                start=round(start, 6),
+                end=round(cursor_seconds, 6),
+                midi=phrase_root + offset,
+            ))
+    return PracticeScore(
+        exercise_key=definition.exercise_key,
+        version=PRACTICE_ASSET_VERSION,
+        voice=voice,
+        tempo_bpm=definition.tempo_bpm,
+        range_start_midi=range_start,
+        range_end_midi=range_end,
+        duration=round(cursor_seconds, 6),
+        cue_notes=tuple(cues),
+        target_notes=tuple(events),
+    )
