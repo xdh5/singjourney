@@ -1,50 +1,51 @@
 <template>
   <view class="control-card sj-card">
-    <view class="range-summary">
-      <view class="waveform-icon" aria-hidden="true">
-        <view
-          v-for="height in waveformHeights"
-          :key="height"
-          class="waveform-bar"
-          :style="{ height: `${height}rpx` }"
-        />
-      </view>
-      <text class="range-value">{{ formattedRange }}</text>
+    <view class="waveform-icon" aria-hidden="true">
+      <view
+        v-for="height in waveformHeights"
+        :key="height"
+        class="waveform-bar"
+        :style="{ height: `${height}rpx` }"
+      />
     </view>
 
-    <view class="range-sliders">
-      <view class="slider-row">
-        <text class="slider-label">{{ t('practice.rangeMinimum') }}</text>
-        <slider
-          class="range-slider"
-          :min="PRACTICE_RANGE_MINIMUM_MIDI"
-          :max="draftMaximum - 1"
-          :value="draftMinimum"
-          active-color="#238b6c"
-          background-color="#dce9e4"
-          block-color="#168d69"
-          :block-size="16"
-          @changing="changeMinimum"
-          @change="commitMinimum"
+    <view class="range-slider-panel">
+      <text class="range-end-label">{{ midiToNoteName(draftMinimum) }}</text>
+      <view
+        class="range-track"
+        @tap="tapTrack"
+      >
+        <view class="range-track-base" />
+        <view
+          class="range-track-selected"
+          :style="selectedTrackStyle"
         />
-        <text class="note-label">{{ midiToNoteName(draftMinimum) }}</text>
-      </view>
-      <view class="slider-row">
-        <text class="slider-label">{{ t('practice.rangeMaximum') }}</text>
-        <slider
-          class="range-slider"
-          :min="draftMinimum + 1"
-          :max="PRACTICE_RANGE_MAXIMUM_MIDI"
-          :value="draftMaximum"
-          active-color="#238b6c"
-          background-color="#dce9e4"
-          block-color="#168d69"
-          :block-size="16"
-          @changing="changeMaximum"
-          @change="commitMaximum"
+        <view
+          class="range-handle range-handle-minimum"
+          :style="{ left: `${minimumPercent}%` }"
+          role="slider"
+          :aria-label="t('practice.rangeMinimum')"
+          :aria-valuenow="draftMinimum"
+          @tap.stop
+          @touchstart.stop="startDrag('minimum', $event)"
+          @touchmove.stop.prevent="dragHandle"
+          @touchend.stop="finishDrag"
+          @touchcancel.stop="finishDrag"
         />
-        <text class="note-label">{{ midiToNoteName(draftMaximum) }}</text>
+        <view
+          class="range-handle range-handle-maximum"
+          :style="{ left: `${maximumPercent}%` }"
+          role="slider"
+          :aria-label="t('practice.rangeMaximum')"
+          :aria-valuenow="draftMaximum"
+          @tap.stop
+          @touchstart.stop="startDrag('maximum', $event)"
+          @touchmove.stop.prevent="dragHandle"
+          @touchend.stop="finishDrag"
+          @touchcancel.stop="finishDrag"
+        />
       </view>
+      <text class="range-end-label">{{ midiToNoteName(draftMaximum) }}</text>
     </view>
 
     <view
@@ -64,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   PRACTICE_RANGE_MAXIMUM_MIDI,
@@ -81,9 +82,23 @@ const { t } = useI18n()
 const waveformHeights = [12, 24, 36, 44, 36, 24, 12]
 const draftMinimum = ref(props.range.minimumMidi)
 const draftMaximum = ref(props.range.maximumMidi)
-const formattedRange = computed(
-  () => `${midiToNoteName(draftMinimum.value)}-${midiToNoteName(draftMaximum.value)}`
+const instance = getCurrentInstance()
+const rangeSpan = PRACTICE_RANGE_MAXIMUM_MIDI - PRACTICE_RANGE_MINIMUM_MIDI
+const minimumPercent = computed(
+  () => ((draftMinimum.value - PRACTICE_RANGE_MINIMUM_MIDI) / rangeSpan) * 100
 )
+const maximumPercent = computed(
+  () => ((draftMaximum.value - PRACTICE_RANGE_MINIMUM_MIDI) / rangeSpan) * 100
+)
+const selectedTrackStyle = computed(() => ({
+  left: `${minimumPercent.value}%`,
+  width: `${maximumPercent.value - minimumPercent.value}%`
+}))
+let activeHandle: 'minimum' | 'maximum' | null = null
+let draggedSinceTouchStart = false
+let suppressTrackTap = false
+let trackLeft = 0
+let trackWidth = 1
 
 watch(
   () => props.range,
@@ -94,22 +109,73 @@ watch(
   { deep: true }
 )
 
-function changeMinimum(event: { detail: { value: number } }) {
-  draftMinimum.value = Math.min(event.detail.value, draftMaximum.value - 1)
+function startDrag(handle: 'minimum' | 'maximum', event: TouchEvent) {
+  activeHandle = handle
+  draggedSinceTouchStart = false
+  measureTrack(() => updateFromClientX(event.touches[0]?.clientX))
 }
 
-function commitMinimum(event: { detail: { value: number } }) {
-  changeMinimum(event)
+function dragHandle(event: TouchEvent) {
+  draggedSinceTouchStart = true
+  updateFromClientX(event.touches[0]?.clientX)
+}
+
+function finishDrag() {
+  if (!activeHandle) return
+  suppressTrackTap = draggedSinceTouchStart
+  if (suppressTrackTap) {
+    setTimeout(() => {
+      suppressTrackTap = false
+    }, 150)
+  }
+  activeHandle = null
   commitRange()
 }
 
-function changeMaximum(event: { detail: { value: number } }) {
-  draftMaximum.value = Math.max(event.detail.value, draftMinimum.value + 1)
+function tapTrack(event: { detail: { x: number } }) {
+  if (suppressTrackTap) {
+    suppressTrackTap = false
+    return
+  }
+  measureTrack(() => {
+    const tappedMidi = midiFromClientX(event.detail.x)
+    activeHandle =
+      Math.abs(tappedMidi - draftMinimum.value) <= Math.abs(tappedMidi - draftMaximum.value)
+        ? 'minimum'
+        : 'maximum'
+    updateFromClientX(event.detail.x)
+    activeHandle = null
+    commitRange()
+  })
 }
 
-function commitMaximum(event: { detail: { value: number } }) {
-  changeMaximum(event)
-  commitRange()
+function measureTrack(callback: () => void) {
+  uni
+    .createSelectorQuery()
+    .in(instance?.proxy)
+    .select('.range-track')
+    .boundingClientRect((rect) => {
+      const bounds = rect as UniApp.NodeInfo
+      if (typeof bounds.left === 'number') trackLeft = bounds.left
+      if (typeof bounds.width === 'number' && bounds.width > 0) trackWidth = bounds.width
+      callback()
+    })
+    .exec()
+}
+
+function midiFromClientX(clientX: number) {
+  const ratio = Math.max(0, Math.min(1, (clientX - trackLeft) / trackWidth))
+  return PRACTICE_RANGE_MINIMUM_MIDI + Math.round(ratio * rangeSpan)
+}
+
+function updateFromClientX(clientX?: number) {
+  if (!activeHandle || typeof clientX !== 'number') return
+  const midi = midiFromClientX(clientX)
+  if (activeHandle === 'minimum') {
+    draftMinimum.value = Math.min(midi, draftMaximum.value - 1)
+  } else {
+    draftMaximum.value = Math.max(midi, draftMinimum.value + 1)
+  }
 }
 
 function commitRange() {
@@ -128,87 +194,92 @@ function midiToNoteName(midi: number) {
 <style scoped lang="scss">
 .control-card {
   display: flex;
-  min-height: 132rpx;
+  min-height: 112rpx;
   align-items: center;
-  padding: 14rpx 18rpx;
+  gap: 14rpx;
+  padding: 12rpx 20rpx;
   box-sizing: border-box;
   border: 0;
   border-radius: 36rpx;
   background: #fff;
   box-shadow: 0 8rpx 28rpx rgba(31, 70, 57, 0.09);
 }
-.range-summary {
-  display: flex;
-  min-width: 180rpx;
-  align-items: center;
-  gap: 8rpx;
-  padding-right: 14rpx;
-  border-right: 1px solid #e5ece9;
-}
 .waveform-icon {
   display: flex;
-  width: 48rpx;
-  height: 64rpx;
+  width: 46rpx;
+  height: 54rpx;
   align-items: center;
   justify-content: center;
-  gap: 3rpx;
+  gap: 4rpx;
 }
 .waveform-bar {
-  width: 3rpx;
-  max-height: 38rpx;
+  width: 5rpx;
+  max-height: 34rpx;
   border-radius: 999rpx;
   background: #2aa27c;
 }
-.range-value {
-  color: $singjourney-green-dark;
-  font-size: 29rpx;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.range-sliders {
+.range-slider-panel {
   display: flex;
   min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 2rpx;
-  padding: 0 12rpx;
-}
-.slider-row {
-  display: flex;
-  height: 48rpx;
   align-items: center;
+  gap: 14rpx;
+  flex: 1;
+  padding: 0 2rpx;
 }
-.slider-label,
-.note-label {
-  color: #60756e;
-  font-size: 21rpx;
-  font-weight: 600;
+.range-end-label {
+  width: 54rpx;
+  flex: 0 0 54rpx;
+  color: #15966e;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 40rpx;
+  text-align: center;
   white-space: nowrap;
 }
-.slider-label {
-  width: 48rpx;
-}
-.note-label {
-  width: 54rpx;
-  color: #176f56;
-  text-align: right;
-}
-.range-slider {
-  min-width: 120rpx;
+.range-track {
+  position: relative;
+  height: 40rpx;
+  min-width: 150rpx;
   flex: 1;
-  margin: 0;
+}
+.range-track-base,
+.range-track-selected {
+  position: absolute;
+  top: 18rpx;
+  height: 5rpx;
+  border-radius: 999rpx;
+}
+.range-track-base {
+  right: 0;
+  left: 0;
+  background: #dce9e4;
+}
+.range-track-selected {
+  background: #149b72;
+}
+.range-handle {
+  position: absolute;
+  top: 0;
+  width: 38rpx;
+  height: 38rpx;
+  box-sizing: border-box;
+  border: 5rpx solid #149b72;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 8rpx rgba(24, 121, 92, 0.25);
+  transform: translateX(-50%);
 }
 .headset-control {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  border-left: 1px solid #e5ece9;
-  padding-left: 14rpx;
+  padding-left: 2rpx;
 }
 .headset-switch {
   position: relative;
   display: inline-flex;
-  height: 56rpx;
+  min-width: 174rpx;
+  height: 58rpx;
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
@@ -218,28 +289,28 @@ function midiToNoteName(midi: number) {
   background: #168d69;
 }
 .headset-switch-label {
-  padding: 0 14rpx 0 44rpx;
+  padding: 0 14rpx 0 46rpx;
   color: #40564e;
   font-size: 22rpx;
   font-weight: 600;
   white-space: nowrap;
 }
 .headset-switch.active .headset-switch-label {
-  padding: 0 44rpx 0 14rpx;
+  padding: 0 46rpx 0 14rpx;
   color: #fff;
 }
 .headset-switch-knob {
   position: absolute;
-  top: 11rpx;
-  left: 6rpx;
-  width: 34rpx;
-  height: 34rpx;
+  top: 7rpx;
+  left: 7rpx;
+  width: 44rpx;
+  height: 44rpx;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 2rpx 7rpx rgba(26, 69, 55, 0.18);
 }
 .headset-switch.active .headset-switch-knob {
-  right: 6rpx;
+  right: 7rpx;
   left: auto;
 }
 </style>

@@ -157,10 +157,12 @@ def _build_round_trip_manifest(
     ]
     ascending = phrases[:ascending_count]
     descending = phrases[ascending_count:]
+    maximum_offset = max(definition.pattern)
+    highest_root = maximum_midi - maximum_offset
     ascending_selected = ascending[
-        minimum_midi - master_start:maximum_midi - master_start + 1
+        minimum_midi - master_start:highest_root - master_start + 1
     ]
-    descending_start_root = maximum_midi - 1
+    descending_start_root = highest_root - 1
     descending_selected = [] if descending_start_root < minimum_midi else descending[
         master_end - descending_start_root:master_end - minimum_midi + 1
     ]

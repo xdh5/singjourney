@@ -156,6 +156,7 @@
     "startExercise": "开始练习",
     "gotIt": "知道了",
     "catalogLoadFailed": "练习内容加载失败",
+    "rangeTooNarrowTitle": "音域范围不足",
     "emptyCatalog": "暂无练习内容",
     "emptyFavorites": "暂无收藏",
     "beginNow": "开始练习",

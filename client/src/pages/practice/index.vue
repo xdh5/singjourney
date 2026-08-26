@@ -104,6 +104,7 @@ import {
   type CompletedPracticeEvent
 } from '../../services/practice/statistics'
 import { fetchPracticeManifest } from '../../services/practice/catalog'
+import { HttpError } from '../../utils/http/client'
 import { usePracticeCatalogStore } from '../../stores/practice-catalog'
 import { usePracticeFavoritesStore } from '../../stores/practice-favorites'
 import { useAuthenticationStore } from '../../stores/authentication'
@@ -225,8 +226,15 @@ async function startExercise(id: string) {
   try {
     activeExerciseTitle.value = exercise.title
     activeManifest.value = await fetchPracticeManifest(id, selectedRange.value)
-  } catch {
+  } catch (error) {
     activeExerciseTitle.value = ''
+    if (error instanceof HttpError && error.statusCode === 422) {
+      const detail = error.responseData as { detail?: { code?: string; minimum_span_midi?: number } } | undefined
+      if (detail?.detail?.code === 'practice_range_too_narrow') {
+        uni.showToast({ title: t('practice.rangeTooNarrowTitle'), icon: 'none' })
+        return
+      }
+    }
     uni.showToast({ title: t('practice.catalogLoadFailed'), icon: 'none' })
   }
 }

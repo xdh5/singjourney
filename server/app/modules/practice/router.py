@@ -63,6 +63,18 @@ def get_practice_manifest(
         MINIMUM_PRACTICE_RANGE_MIDI <= minimum_midi < maximum_midi <= MAXIMUM_PRACTICE_RANGE_MIDI
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid practice range")
+    definition = PRACTICE_EXERCISES_BY_KEY[exercise_id]
+    required_span = max(definition.pattern) - min(definition.pattern)
+    if maximum_midi - minimum_midi < required_span:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "practice_range_too_narrow",
+                "minimum_span_midi": required_span,
+                "minimum_midi": minimum_midi,
+                "maximum_midi": maximum_midi,
+            },
+        )
     filename = master_accompaniment_filename(exercise_id)
     return PracticeManifestResponse.model_validate(
         build_practice_manifest(

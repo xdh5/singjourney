@@ -156,6 +156,7 @@
     "startExercise": "Start practice",
     "gotIt": "Got it",
     "catalogLoadFailed": "Unable to load exercises",
+    "rangeTooNarrowTitle": "Range too narrow",
     "emptyCatalog": "No practice content",
     "emptyFavorites": "No favorites yet",
     "beginNow": "Start practice",
