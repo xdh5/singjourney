@@ -12,7 +12,7 @@ from app.modules.practice.constants import (
     OPUS_BITRATE,
     PIANO_CUE_DURATION_BEATS,
     RENDER_SAMPLE_RATE,
-    accompaniment_filename,
+    master_accompaniment_filename,
     piano_note_duration_beats_for,
 )
 from app.modules.practice.score import PracticeScore
@@ -22,7 +22,7 @@ def render_practice_score(score: PracticeScore, output_directory: Path, soundfon
     """在 Docker 构建阶段把乐谱渲染为按内容寻址的单声道 Opus。"""
 
     output_directory.mkdir(parents=True, exist_ok=True)
-    stem = Path(accompaniment_filename(score.exercise_key, score.voice)).stem
+    stem = Path(master_accompaniment_filename(score.exercise_key)).stem
     midi_path = output_directory / f"{stem}.mid"
     wav_path = output_directory / f"{stem}.wav"
     opus_path = output_directory / f"{stem}.opus"

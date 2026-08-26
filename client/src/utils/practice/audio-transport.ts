@@ -6,6 +6,8 @@ export type PracticeTransportCallbacks = {
   onError: () => void
 }
 
+export type PracticeAudioSegment = { sourceOffset: number; duration: number }
+
 type TransportMode = 'idle' | 'practice' | 'replay' | 'paused'
 type ActiveTransportMode = 'practice' | 'replay'
 
@@ -38,7 +40,7 @@ function createScheduledTransport() {
   const audioContext = createAudioContext()
   let accompanimentBuffer: any = null
   let accompanimentPath = ''
-  let accompanimentSource: any = null
+  let accompanimentSources: any[] = []
   let voiceSource: any = null
   let replayVoiceBuffer: any = null
   let replayVoicePath = ''
@@ -53,15 +55,27 @@ function createScheduledTransport() {
   let replayEndsAt = 0
   let segmentOffset = 0
   let segmentDuration = Number.POSITIVE_INFINITY
+  let audioSegments: PracticeAudioSegment[] = []
   let callbacks: PracticeTransportCallbacks | null = null
   let startTimer: ReturnType<typeof setTimeout> | undefined
   let clockTimer: ReturnType<typeof setInterval> | undefined
   let ignoreEnded = false
 
-  async function prepare(path: string, audioOffset = 0, duration?: number) {
+  async function prepare(
+    path: string,
+    audioOffset = 0,
+    duration?: number,
+    segments?: PracticeAudioSegment[]
+  ) {
     await resumeContext(audioContext)
     segmentOffset = Math.max(0, audioOffset)
     segmentDuration = duration === undefined ? Number.POSITIVE_INFINITY : Math.max(0, duration)
+    audioSegments = segments?.length
+      ? segments.map((segment) => ({
+          sourceOffset: Math.max(0, segment.sourceOffset),
+          duration: Math.max(0, segment.duration)
+        }))
+      : [{ sourceOffset: segmentOffset, duration: segmentDuration }]
     if (!accompanimentBuffer || accompanimentPath !== path) {
       accompanimentBuffer = await decodeFile(audioContext, path)
       accompanimentPath = path
@@ -155,13 +169,21 @@ function createScheduledTransport() {
       Math.min(segmentDuration, endsAt ?? segmentDuration) - offset
     )
     if (includeAccompaniment) {
-      accompanimentSource = createSource(
-        audioContext,
-        accompanimentBuffer,
-        includeVoice ? REPLAY_ACCOMPANIMENT_GAIN : 1
-      )
-      accompanimentSource.onended = handleTransportEnded
-      accompanimentSource.start(scheduledAt, segmentOffset + offset, duration)
+      const scheduledSegments = sliceAudioSegments(audioSegments, offset, duration)
+      accompanimentSources = scheduledSegments.map((segment, index) => {
+        const source = createSource(
+          audioContext,
+          accompanimentBuffer,
+          includeVoice ? REPLAY_ACCOMPANIMENT_GAIN : 1
+        )
+        if (index === scheduledSegments.length - 1) source.onended = handleTransportEnded
+        source.start(
+          scheduledAt + segment.timelineOffset,
+          segment.sourceOffset,
+          segment.duration
+        )
+        return source
+      })
     }
     if (includeVoice && voiceBuffer) {
       voiceSource = createSource(audioContext, voiceBuffer, replayVoiceGain, true)
@@ -242,15 +264,15 @@ function createScheduledTransport() {
   function stopSources() {
     ignoreEnded = true
     clearTimers()
-    if (accompanimentSource) accompanimentSource.onended = null
+    for (const source of accompanimentSources) source.onended = null
     if (voiceSource) voiceSource.onended = null
     try {
-      accompanimentSource?.stop()
+      for (const source of accompanimentSources) source.stop()
     } catch {}
     try {
       voiceSource?.stop()
     } catch {}
-    accompanimentSource = null
+    accompanimentSources = []
     voiceSource = null
     queueMicrotask(() => {
       ignoreEnded = false
@@ -294,6 +316,32 @@ function createScheduledTransport() {
     stop,
     destroy
   }
+}
+
+function sliceAudioSegments(
+  segments: PracticeAudioSegment[],
+  offset: number,
+  duration: number
+) {
+  const result: Array<PracticeAudioSegment & { timelineOffset: number }> = []
+  let skipped = Math.max(0, offset)
+  let remaining = Math.max(0, duration)
+  let timelineOffset = 0
+  for (const segment of segments) {
+    if (remaining <= 0) break
+    if (skipped >= segment.duration) {
+      skipped -= segment.duration
+      continue
+    }
+    const sourceOffset = segment.sourceOffset + skipped
+    const available = segment.duration - skipped
+    const selectedDuration = Math.min(available, remaining)
+    result.push({ sourceOffset, duration: selectedDuration, timelineOffset })
+    timelineOffset += selectedDuration
+    remaining -= selectedDuration
+    skipped = 0
+  }
+  return result
 }
 
 function createAudioContext(): any {
@@ -489,7 +537,12 @@ function createFallbackTransport() {
   }
 
   return {
-    async prepare(path: string, audioOffset = 0, duration?: number) {
+    async prepare(
+      path: string,
+      audioOffset = 0,
+      duration?: number,
+      _segments?: PracticeAudioSegment[]
+    ) {
       accompaniment.src = path
       segmentOffset = Math.max(0, audioOffset)
       segmentDuration = duration === undefined ? Number.POSITIVE_INFINITY : Math.max(0, duration)

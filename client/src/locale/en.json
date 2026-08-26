@@ -122,6 +122,8 @@
   },
   "practice": {
     "currentRange": "Current range",
+    "rangeMinimum": "Low",
+    "rangeMaximum": "High",
     "headphonesConnected": "Headphones on",
     "headphonesDisconnected": "No headphones",
     "headphonesDelayTitle": "Headphone delay",

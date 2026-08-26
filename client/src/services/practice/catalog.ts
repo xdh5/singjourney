@@ -1,8 +1,6 @@
 import { requestJson, resolveApiUrl } from '../../utils/http/client'
 import type { PracticeManifest } from '../../utils/practice/types'
-import type { VoicePreset } from '../account/preferences'
-
-export type { VoicePreset } from '../account/preferences'
+import type { VocalRange } from '../account/preferences'
 
 export type PracticeCategory = { key: string; name: string }
 
@@ -32,18 +30,19 @@ export function fetchPracticeCatalog() {
 type PracticeManifestResponse = {
   exercise_key: string
   version: number
-  voice: VoicePreset
+  voice: string
   tempo_bpm: number
   range: { minimum_midi: number; maximum_midi: number }
   duration: number
   audio_path: string
   audio_offset: number
+  audio_segments: Array<{ source_offset: number; duration: number }>
   target_notes: Array<{ start: number; end: number; midi: number }>
 }
 
-export async function fetchPracticeManifest(exerciseId: string, voice: VoicePreset) {
+export async function fetchPracticeManifest(exerciseId: string, range: VocalRange) {
   const response = await requestJson<PracticeManifestResponse>(
-    `/practice/exercises/${encodeURIComponent(exerciseId)}/manifest?voice=${voice}`
+    `/practice/exercises/${encodeURIComponent(exerciseId)}/manifest?minimum_midi=${range.minimumMidi}&maximum_midi=${range.maximumMidi}`
   )
   return {
     exerciseKey: response.exercise_key,
@@ -57,6 +56,10 @@ export async function fetchPracticeManifest(exerciseId: string, voice: VoicePres
     duration: response.duration,
     audioPath: resolveApiUrl(response.audio_path),
     audioOffset: response.audio_offset,
+    audioSegments: response.audio_segments.map((segment) => ({
+      sourceOffset: segment.source_offset,
+      duration: segment.duration
+    })),
     targetNotes: response.target_notes
   } satisfies PracticeManifest
 }

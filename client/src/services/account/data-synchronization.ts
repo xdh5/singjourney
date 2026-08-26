@@ -6,10 +6,12 @@ import {
   type StoredAuthSession
 } from '../../utils/http/authentication'
 import {
-  clearLocalVoicePreset,
-  isVoicePreset,
-  readStoredLocalVoicePreset,
-  storeLocalVoicePreset
+  clearLocalVocalRange,
+  isVocalRange,
+  readStoredLocalVocalRange,
+  storeLocalVocalRange,
+  vocalRangeFromLegacyVoice,
+  type VocalRange
 } from './preferences'
 import { resolveScalarServerFirst } from './sync-policy'
 import {
@@ -27,19 +29,23 @@ import {
  */
 export async function synchronizeAllUserDataAfterLogin(session: StoredAuthSession) {
   let synchronizedSession = session
-  const localVoice = readStoredLocalVoicePreset()
-  const voice = resolveScalarServerFirst(
-    localVoice,
-    session.user.preferred_voice_preset,
-    isVoicePreset
+  const localRange = readStoredLocalVocalRange()
+  const serverRange = readServerVocalRange(session)
+  const range = resolveScalarServerFirst(
+    localRange,
+    serverRange,
+    isVocalRange
   )
 
-  if (voice.source === 'server') {
-    clearLocalVoicePreset()
-  } else if (voice.source === 'local' && voice.value) {
+  if (range.source === 'server') {
+    clearLocalVocalRange()
+  } else if (range.source === 'local' && range.value) {
     try {
-      synchronizedSession = await updateCurrentUserProfile({ preferredVoicePreset: voice.value })
-      clearLocalVoicePreset()
+      synchronizedSession = await updateCurrentUserProfile({
+        preferredRangeMinimumMidi: range.value.minimumMidi,
+        preferredRangeMaximumMidi: range.value.maximumMidi
+      })
+      clearLocalVocalRange()
     } catch {
       // 单值同步失败时保留本地值，但不阻塞其他用户数据继续同步。
     }
@@ -66,10 +72,18 @@ export async function synchronizeAllUserDataBeforeLogout(session: StoredAuthSess
     synchronizePracticeFavoritesToLocal(),
     persistCurrentStatisticsForLogout()
   ])
-  if (isVoicePreset(session.user.preferred_voice_preset)) {
-    storeLocalVoicePreset(session.user.preferred_voice_preset)
-  }
+  const range = readServerVocalRange(session)
+  if (range) storeLocalVocalRange(range)
   storeLocalUserSnapshot(session.user)
+}
+
+function readServerVocalRange(session: StoredAuthSession): VocalRange | null {
+  const range = {
+    minimumMidi: session.user.preferred_range_min_midi,
+    maximumMidi: session.user.preferred_range_max_midi
+  }
+  if (isVocalRange(range)) return range
+  return vocalRangeFromLegacyVoice(session.user.preferred_voice_preset)
 }
 
 function isStoredUser(value: unknown): value is StoredAuthSession['user'] {

@@ -131,6 +131,11 @@ class PracticeRangeResponse(BaseModel):
     maximum_midi: int
 
 
+class PracticeAudioSegmentResponse(BaseModel):
+    source_offset: float
+    duration: float
+
+
 class PracticeManifestResponse(BaseModel):
     exercise_key: str
     version: int
@@ -140,6 +145,7 @@ class PracticeManifestResponse(BaseModel):
     duration: float
     audio_path: str
     audio_offset: float
+    audio_segments: list[PracticeAudioSegmentResponse]
     target_notes: list[PracticeTargetNoteResponse]
 
 

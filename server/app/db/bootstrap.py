@@ -27,6 +27,25 @@ def initialize_database() -> None:
             connection.execute(
                 text("ALTER TABLE users ADD COLUMN preferred_voice_preset VARCHAR(8)")
             )
+    if "preferred_range_min_midi" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN preferred_range_min_midi INTEGER"))
+    if "preferred_range_max_midi" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN preferred_range_max_midi INTEGER"))
+    with engine.begin() as connection:
+        connection.execute(text(
+            """
+            UPDATE users
+            SET preferred_range_min_midi = CASE preferred_voice_preset
+                    WHEN 'female' THEN 52 WHEN 'male' THEN 48 END,
+                preferred_range_max_midi = CASE preferred_voice_preset
+                    WHEN 'female' THEN 76 WHEN 'male' THEN 72 END
+            WHERE preferred_range_min_midi IS NULL
+              AND preferred_range_max_midi IS NULL
+              AND preferred_voice_preset IN ('female', 'male')
+            """
+        ))
     with SessionLocal.begin() as session:
         if session.scalar(select(func.count()).select_from(DailyPracticeMessage)) == 0:
             session.add_all(
@@ -86,35 +105,45 @@ def synchronize_practice_tempos(session) -> None:
 
 
 def synchronize_practice_catalog(session) -> None:
-    """将新增的内置练习补充到已有曲库。"""
+    """让已有数据库中的内置曲库与当前种子数据保持一致。"""
 
     existing_exercise_ids = set(session.scalars(select(PracticeExercise.id)))
     for index, row in enumerate(EXERCISES, start=1):
         exercise_id, primary_category = row[0], row[1]
-        if exercise_id in existing_exercise_ids:
-            continue
-        session.add(
-            PracticeExercise(
+        exercise = session.get(PracticeExercise, exercise_id)
+        if exercise is None:
+            exercise = PracticeExercise(
                 id=exercise_id,
-                title_zh_hans=row[2],
-                title_en=row[3],
-                tip_zh_hans=row[4],
-                tip_en=row[5],
-                pattern=row[6],
-                recommended_syllables=row[7],
-                tempo=PRACTICE_EXERCISES_BY_KEY[exercise_id].tempo_bpm,
-                repetitions=row[9],
-                intensity=row[10],
-                enabled=True,
-                sort_order=index * 10,
             )
-        )
+            session.add(exercise)
+        exercise.title_zh_hans = row[2]
+        exercise.title_en = row[3]
+        exercise.tip_zh_hans = row[4]
+        exercise.tip_en = row[5]
+        exercise.pattern = row[6]
+        exercise.recommended_syllables = row[7]
+        exercise.tempo = PRACTICE_EXERCISES_BY_KEY[exercise_id].tempo_bpm
+        exercise.repetitions = row[9]
+        exercise.intensity = row[10]
+        exercise.enabled = True
+        exercise.sort_order = index * 10
         category_keys = (primary_category, *EXTRA_TAGS.get(exercise_id, ()))
         for tag_index, category_key in enumerate(dict.fromkeys(category_keys)):
-            session.add(
-                PracticeExerciseCategory(
+            category = session.get(PracticeExerciseCategory, (exercise_id, category_key))
+            if category is None:
+                category = PracticeExerciseCategory(
                     exercise_id=exercise_id,
                     category_key=category_key,
-                    sort_order=tag_index * 10,
                 )
+                session.add(category)
+            category.sort_order = tag_index * 10
+
+    obsolete = session.get(PracticeExercise, "natural-mnn-third-hum-round-trip")
+    if obsolete is not None:
+        obsolete.enabled = False
+        for category in session.scalars(
+            select(PracticeExerciseCategory).where(
+                PracticeExerciseCategory.exercise_id == obsolete.id
             )
+        ):
+            session.delete(category)

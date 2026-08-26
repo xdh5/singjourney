@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,6 +24,8 @@ class User(Base):
     avatar_data_url: Mapped[str | None] = mapped_column(Text)
     locale: Mapped[str | None] = mapped_column(String(16))
     preferred_voice_preset: Mapped[str | None] = mapped_column(String(8))
+    preferred_range_min_midi: Mapped[int | None] = mapped_column(Integer)
+    preferred_range_max_midi: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 

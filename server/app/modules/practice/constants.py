@@ -27,8 +27,7 @@ _PRACTICE_EXERCISE_DEFINITIONS = (
     PracticeExerciseDefinition("natural-lip-trill-five", 72, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("natural-tongue-trill-five", 72, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("natural-hum-five", 68, FIVE_NOTE_PATTERN),
-    PracticeExerciseDefinition("natural-mnn-third-hum", 68, (0, 2, 4, 2, 0)),
-    PracticeExerciseDefinition("natural-mnn-third-hum-round-trip", 68, (0, 2, 4, 2, 0), "round_trip"),
+    PracticeExerciseDefinition("natural-mnn-third-hum", 68, (0, 2, 4, 2, 0), "round_trip"),
     PracticeExerciseDefinition("natural-ng-octave-glide", 66, OCTAVE_GLIDE_PATTERN),
     PracticeExerciseDefinition("natural-v-five", 70, FIVE_NOTE_PATTERN),
     PracticeExerciseDefinition("natural-vowel-five", 72, FIVE_NOTE_PATTERN),
@@ -111,7 +110,7 @@ PRACTICE_EXERCISE_DEFINITIONS = tuple(
 PRACTICE_EXERCISES_BY_KEY = {
     definition.exercise_key: definition for definition in PRACTICE_EXERCISE_DEFINITIONS
 }
-PRACTICE_ASSET_VERSION = 15
+PRACTICE_ASSET_VERSION = 16
 
 PHRASE_LEAD_IN_SECONDS = 1.0
 CUE_REST_BEATS = 1.0
@@ -127,9 +126,11 @@ OPUS_BITRATE = "16k"
 ACCOMPANIMENT_LOUDNESS_FILTER = "highpass=f=55,treble=g=3:f=2800,loudnorm=I=-16:LRA=7:TP=-1.5"
 
 MASTER_PIANO_RANGE = (48, 77)  # C3-F5
-VOICE_PLAYBACK_RANGES: dict[str, tuple[int, int]] = {
+MINIMUM_PRACTICE_RANGE_MIDI = MASTER_PIANO_RANGE[0]
+MAXIMUM_PRACTICE_RANGE_MIDI = MASTER_PIANO_RANGE[1]
+LEGACY_VOICE_PLAYBACK_RANGES: dict[str, tuple[int, int]] = {
     "male": (48, 72),   # C3-C5
-    "female": (53, 77), # F3-F5
+    "female": (52, 76), # E3-E5
 }
 
 GENERATED_ASSET_DIRECTORY = Path("/app/practice-assets")
@@ -166,32 +167,9 @@ def master_accompaniment_filename(exercise_key: str) -> str:
 
 
 def accompaniment_filename(exercise_key: str, voice: str) -> str:
-    """返回练习对应声线的伴奏文件名。"""
+    """兼容旧调用，所有音域共用同一份完整母带。"""
 
-    definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
-    if definition.progression_mode == "one_way":
-        return master_accompaniment_filename(exercise_key)
-    render_signature = (
-        PRACTICE_ASSET_VERSION,
-        definition.tempo_bpm,
-        definition.pattern,
-        definition.progression_mode,
-        voice,
-        VOICE_PLAYBACK_RANGES[voice],
-        PHRASE_LEAD_IN_SECONDS,
-        CUE_REST_BEATS,
-        definition.guide_note_beats,
-        definition.piano_note_duration_beats,
-        PIANO_CUE_DURATION_BEATS,
-        MIDI_PIANO_PROGRAM,
-        MIDI_GUIDE_VELOCITY,
-        MIDI_CUE_VELOCITY,
-        RENDER_SAMPLE_RATE,
-        OPUS_BITRATE,
-        ACCOMPANIMENT_LOUDNESS_FILTER,
-    )
-    digest = sha256(repr(render_signature).encode("utf-8")).hexdigest()[:16]
-    return f"accompaniment-{digest}.opus"
+    return master_accompaniment_filename(exercise_key)
 
 
 def guide_note_beats_for(exercise_key: str) -> float:

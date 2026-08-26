@@ -2,12 +2,12 @@ from dataclasses import dataclass
 
 from app.modules.practice.constants import (
     CUE_REST_BEATS,
+    LEGACY_VOICE_PLAYBACK_RANGES,
     MASTER_PIANO_RANGE,
     PHRASE_LEAD_IN_SECONDS,
     PIANO_CUE_DURATION_BEATS,
     PRACTICE_ASSET_VERSION,
     PRACTICE_EXERCISES_BY_KEY,
-    VOICE_PLAYBACK_RANGES,
     guide_note_beats_for,
 )
 
@@ -44,71 +44,50 @@ class PracticeScore:
     target_notes: tuple[TargetNoteEvent, ...]
 
 def build_practice_master_score(exercise_key: str) -> PracticeScore:
-    """Build one authoritative C3-F5 accompaniment for an exercise."""
+    """构建一份覆盖完整音域的权威伴奏。"""
 
     definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
     range_start, range_end = MASTER_PIANO_RANGE
     maximum_offset = max(definition.pattern)
-    seconds_per_beat = 60 / definition.tempo_bpm
-    cursor_seconds = 0.0
-    cue_duration_seconds = PIANO_CUE_DURATION_BEATS * seconds_per_beat
-    cue_rest_seconds = CUE_REST_BEATS * seconds_per_beat
-    guide_note_seconds = guide_note_beats_for(exercise_key) * seconds_per_beat
-    cues: list[CueNoteEvent] = []
-    events: list[TargetNoteEvent] = []
-
-    for phrase_root in range(range_start, range_end - maximum_offset + 1):
-        cursor_seconds += PHRASE_LEAD_IN_SECONDS
-        cues.append(CueNoteEvent(start=round(cursor_seconds, 6), midi=phrase_root))
-        cursor_seconds += cue_duration_seconds + cue_rest_seconds
-        for offset in definition.pattern:
-            start = cursor_seconds
-            cursor_seconds += guide_note_seconds
-            events.append(TargetNoteEvent(
-                start=round(start, 6),
-                end=round(cursor_seconds, 6),
-                midi=phrase_root + offset,
-            ))
-
-    return PracticeScore(
-        exercise_key=definition.exercise_key,
-        version=PRACTICE_ASSET_VERSION,
-        voice="master",
-        tempo_bpm=definition.tempo_bpm,
-        range_start_midi=range_start,
-        range_end_midi=range_end,
-        duration=round(cursor_seconds, 6),
-        cue_notes=tuple(cues),
-        target_notes=tuple(events),
+    if definition.progression_mode == "round_trip":
+        ascending_roots = list(range(range_start, range_end + 1))
+        descending_roots = list(range(range_end, range_start - 1, -1))
+        return _build_practice_score(
+            definition,
+            "master",
+            range_start,
+            range_end,
+            ascending_roots + descending_roots,
+        )
+    return _build_practice_score(
+        definition,
+        "master",
+        range_start,
+        range_end,
+        list(range(range_start, range_end - maximum_offset + 1)),
     )
 
 
-def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> dict[str, object]:
+def build_practice_manifest(
+    exercise_key: str,
+    minimum_midi: int,
+    maximum_midi: int,
+    audio_path: str,
+    legacy_voice: str | None = None,
+) -> dict[str, object]:
     """生成指定声线的练习播放清单。"""
 
-    if voice not in VOICE_PLAYBACK_RANGES:
-        raise ValueError(f"Unsupported voice preset: {voice}")
     definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
     if definition.progression_mode == "round_trip":
-        score = build_practice_round_trip_score(exercise_key, voice)
-        range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
-        return {
-            "exercise_key": score.exercise_key,
-            "version": score.version,
-            "voice": voice,
-            "tempo_bpm": score.tempo_bpm,
-            "range": {"minimum_midi": range_start, "maximum_midi": range_end},
-            "duration": score.duration,
-            "audio_path": audio_path,
-            "audio_offset": 0,
-            "target_notes": [
-                {"start": note.start, "end": note.end, "midi": note.midi}
-                for note in score.target_notes
-            ],
-        }
+        return _build_round_trip_manifest(
+            exercise_key,
+            minimum_midi,
+            maximum_midi,
+            audio_path,
+            legacy_voice,
+        )
     score = build_practice_master_score(exercise_key)
     pattern = PRACTICE_EXERCISES_BY_KEY[exercise_key].pattern
-    range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
     phrase_size = len(pattern)
     phrases = [
         score.target_notes[index:index + phrase_size]
@@ -118,11 +97,11 @@ def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> d
         phrase
         for phrase in phrases
         if phrase
-        and min(note.midi for note in phrase) >= range_start
-        and max(note.midi for note in phrase) <= range_end
+        and min(note.midi for note in phrase) >= minimum_midi
+        and max(note.midi for note in phrase) <= maximum_midi
     ]
     if not selected:
-        raise ValueError(f"Voice preset has no playable phrases: {exercise_key}/{voice}")
+        raise ValueError(f"Selected range has no playable phrases: {exercise_key}")
 
     first_event = selected[0][0]
     last_event = selected[-1][-1]
@@ -137,12 +116,16 @@ def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> d
     return {
         "exercise_key": score.exercise_key,
         "version": score.version,
-        "voice": voice,
+        "voice": legacy_voice or "custom",
         "tempo_bpm": score.tempo_bpm,
-        "range": {"minimum_midi": range_start, "maximum_midi": range_end},
+        "range": {"minimum_midi": minimum_midi, "maximum_midi": maximum_midi},
         "duration": round(segment_end - segment_start, 6),
         "audio_path": audio_path,
         "audio_offset": round(segment_start, 6),
+        "audio_segments": [{
+            "source_offset": round(segment_start, 6),
+            "duration": round(segment_end - segment_start, 6),
+        }],
         "target_notes": [
             {
                 "start": round(note.start - segment_start, 6),
@@ -154,17 +137,76 @@ def build_practice_manifest(exercise_key: str, voice: str, audio_path: str) -> d
     }
 
 
-def build_practice_round_trip_score(exercise_key: str, voice: str) -> PracticeScore:
-    """构建从声线低端上行到高端、再完整回行的独立乐谱。"""
+def _build_round_trip_manifest(
+    exercise_key: str,
+    minimum_midi: int,
+    maximum_midi: int,
+    audio_path: str,
+    legacy_voice: str | None,
+) -> dict[str, object]:
+    """从上、下行母带中裁出两个片段并拼成一条虚拟时间轴。"""
 
-    if voice not in VOICE_PLAYBACK_RANGES:
-        raise ValueError(f"Unsupported voice preset: {voice}")
+    score = build_practice_master_score(exercise_key)
     definition = PRACTICE_EXERCISES_BY_KEY[exercise_key]
-    range_start, range_end = VOICE_PLAYBACK_RANGES[voice]
-    highest_root = range_end - max(definition.pattern)
-    ascending_roots = list(range(range_start, highest_root + 1))
-    phrase_roots = ascending_roots + list(range(highest_root - 1, range_start - 1, -1))
-    return _build_practice_score(definition, voice, range_start, range_end, phrase_roots)
+    phrase_size = len(definition.pattern)
+    master_start, master_end = MASTER_PIANO_RANGE
+    ascending_count = master_end - master_start + 1
+    phrases = [
+        score.target_notes[index:index + phrase_size]
+        for index in range(0, len(score.target_notes), phrase_size)
+    ]
+    ascending = phrases[:ascending_count]
+    descending = phrases[ascending_count:]
+    ascending_selected = ascending[
+        minimum_midi - master_start:maximum_midi - master_start + 1
+    ]
+    descending_start_root = maximum_midi - 1
+    descending_selected = [] if descending_start_root < minimum_midi else descending[
+        master_end - descending_start_root:master_end - minimum_midi + 1
+    ]
+    selected_groups = [ascending_selected, descending_selected]
+    audio_segments: list[dict[str, float]] = []
+    target_notes: list[dict[str, float | int]] = []
+    virtual_cursor = 0.0
+    for selected in selected_groups:
+        if not selected:
+            continue
+        segment_start = _phrase_segment_start(score, selected[0][0])
+        segment_end = selected[-1][-1].end
+        segment_duration = round(segment_end - segment_start, 6)
+        audio_segments.append({
+            "source_offset": round(segment_start, 6),
+            "duration": segment_duration,
+        })
+        for phrase in selected:
+            for note in phrase:
+                target_notes.append({
+                    "start": round(virtual_cursor + note.start - segment_start, 6),
+                    "end": round(virtual_cursor + note.end - segment_start, 6),
+                    "midi": note.midi,
+                })
+        virtual_cursor += segment_duration
+    return {
+        "exercise_key": score.exercise_key,
+        "version": score.version,
+        "voice": legacy_voice or "custom",
+        "tempo_bpm": score.tempo_bpm,
+        "range": {"minimum_midi": minimum_midi, "maximum_midi": maximum_midi},
+        "duration": round(virtual_cursor, 6),
+        "audio_path": audio_path,
+        "audio_offset": audio_segments[0]["source_offset"],
+        "audio_segments": audio_segments,
+        "target_notes": target_notes,
+    }
+
+
+def _phrase_segment_start(score: PracticeScore, first_event: TargetNoteEvent) -> float:
+    cue_duration_seconds = PIANO_CUE_DURATION_BEATS * 60 / score.tempo_bpm
+    cue_rest_seconds = CUE_REST_BEATS * 60 / score.tempo_bpm
+    return max(
+        0.0,
+        first_event.start - PHRASE_LEAD_IN_SECONDS - cue_duration_seconds - cue_rest_seconds,
+    )
 
 
 def _build_practice_score(

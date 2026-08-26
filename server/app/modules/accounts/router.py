@@ -66,6 +66,8 @@ def post_wechat_login(
             avatar_data_url=issued.user.avatar_data_url,
             locale=issued.user.locale,
             preferred_voice_preset=issued.user.preferred_voice_preset,
+            preferred_range_min_midi=issued.user.preferred_range_min_midi,
+            preferred_range_max_midi=issued.user.preferred_range_max_midi,
         ),
     )
 
@@ -100,6 +102,8 @@ def get_current_session(
             avatar_data_url=user.avatar_data_url,
             locale=user.locale,
             preferred_voice_preset=user.preferred_voice_preset,
+            preferred_range_min_midi=user.preferred_range_min_midi,
+            preferred_range_max_midi=user.preferred_range_max_midi,
         ),
     )
 
@@ -116,6 +120,8 @@ def patch_profile(
         request.display_name,
         request.avatar_data_url,
         request.preferred_voice_preset,
+        request.preferred_range_min_midi,
+        request.preferred_range_max_midi,
     )
     return AuthUser(
         id=updated.id,
@@ -123,6 +129,8 @@ def patch_profile(
         avatar_data_url=updated.avatar_data_url,
         locale=updated.locale,
         preferred_voice_preset=updated.preferred_voice_preset,
+        preferred_range_min_midi=updated.preferred_range_min_midi,
+        preferred_range_max_midi=updated.preferred_range_max_midi,
     )
 
 

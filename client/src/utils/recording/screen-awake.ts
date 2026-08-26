@@ -8,6 +8,7 @@ let recordingActive = false
 const awakePageOwners = new Set<string>()
 let webWakeLock: WebWakeLockSentinel | null = null
 let webVisibilityListenerInstalled = false
+let nativeScreenAwakeUpdate = Promise.resolve()
 
 /** 录音采集期间保持屏幕常亮。 */
 export async function keepScreenAwakeWhileRecording() {
@@ -100,14 +101,29 @@ function shouldKeepScreenAwake() {
 
 // #ifndef H5
 async function setUniKeepScreenOn(keepScreenOn: boolean) {
-  const setter = (globalThis as any).uni?.setKeepScreenOn
-  if (typeof setter !== 'function') return
-  await new Promise<void>((resolve) => {
-    try {
-      setter({ keepScreenOn, complete: resolve })
-    } catch {
-      resolve()
-    }
-  })
+  nativeScreenAwakeUpdate = nativeScreenAwakeUpdate.then(
+    () =>
+      new Promise<void>((resolve) => {
+        try {
+          uni.setKeepScreenOn({
+            keepScreenOn,
+            fail: (error) => {
+              console.error('[屏幕常亮错误] 设置屏幕常亮状态失败', {
+                keepScreenOn,
+                error
+              })
+            },
+            complete: () => resolve()
+          })
+        } catch (error) {
+          console.error('[屏幕常亮错误] 调用屏幕常亮接口失败', {
+            keepScreenOn,
+            error
+          })
+          resolve()
+        }
+      })
+  )
+  await nativeScreenAwakeUpdate
 }
 // #endif

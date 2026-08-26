@@ -11,12 +11,16 @@ export interface AuthUser {
   avatar_data_url: string | null
   locale: string | null
   preferred_voice_preset: VoicePreset | null
+  preferred_range_min_midi: number | null
+  preferred_range_max_midi: number | null
 }
 
 export interface UserProfileUpdate {
   displayName?: string
   avatarDataUrl?: string
   preferredVoicePreset?: VoicePreset
+  preferredRangeMinimumMidi?: number
+  preferredRangeMaximumMidi?: number
 }
 
 export interface StoredAuthSession {
@@ -89,7 +93,9 @@ export async function updateCurrentUserProfile(profile: UserProfileUpdate) {
   const user = await requestAuthenticatedJson<AuthUser>('/auth/profile', 'PATCH', {
     display_name: profile.displayName,
     avatar_data_url: profile.avatarDataUrl,
-    preferred_voice_preset: profile.preferredVoicePreset
+    preferred_voice_preset: profile.preferredVoicePreset,
+    preferred_range_min_midi: profile.preferredRangeMinimumMidi,
+    preferred_range_max_midi: profile.preferredRangeMaximumMidi
   })
   const session = getStoredAuthSession()
   if (!session) throw new Error('Authentication session required')

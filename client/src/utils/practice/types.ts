@@ -1,6 +1,4 @@
 import type { StoredPitchPoint } from '@singjourney/contracts'
-import type { VoicePreset } from '../../services/practice/catalog'
-
 export type PracticeTargetNote = {
   start: number
   end: number
@@ -10,12 +8,13 @@ export type PracticeTargetNote = {
 export type PracticeManifest = {
   exerciseKey: string
   version: number
-  voice: VoicePreset
+  voice: string
   tempoBpm: number
   range: { minimumMidi: number; maximumMidi: number }
   duration: number
   audioPath: string
   audioOffset: number
+  audioSegments: Array<{ sourceOffset: number; duration: number }>
   targetNotes: PracticeTargetNote[]
 }
 

@@ -11,10 +11,12 @@ from app.modules.accounts.dependencies import require_current_user
 from app.modules.accounts.models import User
 from app.modules.practice.constants import (
     MAXIMUM_TIMEZONE_OFFSET_MINUTES,
+    MAXIMUM_PRACTICE_RANGE_MIDI,
     MINIMUM_TIMEZONE_OFFSET_MINUTES,
+    MINIMUM_PRACTICE_RANGE_MIDI,
+    LEGACY_VOICE_PLAYBACK_RANGES,
     PRACTICE_EXERCISES_BY_KEY,
-    VOICE_PLAYBACK_RANGES,
-    accompaniment_filename,
+    master_accompaniment_filename,
 )
 from app.modules.practice.schemas import (
     PracticeSessionCreateRequest,
@@ -46,16 +48,29 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 )
 def get_practice_manifest(
     exercise_id: str,
-    voice: str = Query(pattern="^(male|female)$"),
+    minimum_midi: int | None = Query(default=None),
+    maximum_midi: int | None = Query(default=None),
+    voice: str | None = Query(default=None, pattern="^(male|female)$"),
 ) -> PracticeManifestResponse:
     if exercise_id not in PRACTICE_EXERCISES_BY_KEY:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise has no accompaniment")
-    filename = accompaniment_filename(exercise_id, voice)
+    if minimum_midi is None or maximum_midi is None:
+        minimum_midi, maximum_midi = LEGACY_VOICE_PLAYBACK_RANGES.get(
+            voice or "male",
+            LEGACY_VOICE_PLAYBACK_RANGES["male"],
+        )
+    if not (
+        MINIMUM_PRACTICE_RANGE_MIDI <= minimum_midi < maximum_midi <= MAXIMUM_PRACTICE_RANGE_MIDI
+    ):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid practice range")
+    filename = master_accompaniment_filename(exercise_id)
     return PracticeManifestResponse.model_validate(
         build_practice_manifest(
             exercise_id,
-            voice,
+            minimum_midi,
+            maximum_midi,
             f"/practice/assets/{filename}",
+            voice,
         )
     )
 
@@ -66,9 +81,8 @@ def get_practice_asset(
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
     available_filenames = {
-        accompaniment_filename(exercise_key, voice)
+        master_accompaniment_filename(exercise_key)
         for exercise_key in PRACTICE_EXERCISES_BY_KEY
-        for voice in VOICE_PLAYBACK_RANGES
     }
     if filename not in available_filenames:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice asset not found")

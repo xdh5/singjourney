@@ -111,6 +111,8 @@ def update_profile(
     display_name: str | None,
     avatar_data_url: str | None,
     preferred_voice_preset: str | None,
+    preferred_range_min_midi: int | None,
+    preferred_range_max_midi: int | None,
 ) -> User:
     if display_name is not None and user.display_name is None:
         user.display_name = display_name.strip()
@@ -118,6 +120,9 @@ def update_profile(
         user.avatar_data_url = avatar_data_url
     if preferred_voice_preset is not None:
         user.preferred_voice_preset = preferred_voice_preset
+    if preferred_range_min_midi is not None and preferred_range_max_midi is not None:
+        user.preferred_range_min_midi = preferred_range_min_midi
+        user.preferred_range_max_midi = preferred_range_max_midi
     db.commit()
     db.refresh(user)
     return user

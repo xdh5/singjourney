@@ -122,6 +122,8 @@
   },
   "practice": {
     "currentRange": "当前音域",
+    "rangeMinimum": "低",
+    "rangeMaximum": "高",
     "headphonesConnected": "已戴耳机",
     "headphonesDisconnected": "未带耳机",
     "headphonesDelayTitle": "耳机延迟提示",

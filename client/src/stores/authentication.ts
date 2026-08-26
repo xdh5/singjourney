@@ -8,7 +8,7 @@ import {
   type UserProfileUpdate,
   type StoredAuthSession
 } from '../utils/http/authentication'
-import type { VoicePreset } from '../services/account/preferences'
+import type { VocalRange } from '../services/account/preferences'
 import {
   synchronizeAllUserDataAfterLogin,
   synchronizeAllUserDataBeforeLogout
@@ -45,10 +45,13 @@ export const useAuthenticationStore = defineStore('authentication', () => {
     session.value = getStoredAuthSession()
   }
 
-  async function updateVoicePreference(voice: VoicePreset) {
-    session.value = await updateCurrentUserProfile({ preferredVoicePreset: voice })
+  async function updateVocalRangePreference(range: VocalRange) {
+    session.value = await updateCurrentUserProfile({
+      preferredRangeMinimumMidi: range.minimumMidi,
+      preferredRangeMaximumMidi: range.maximumMidi
+    })
     return session.value
   }
 
-  return { session, loggingIn, login, logout, refreshFromStorage, updateVoicePreference }
+  return { session, loggingIn, login, logout, refreshFromStorage, updateVocalRangePreference }
 })

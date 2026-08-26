@@ -348,7 +348,8 @@ async function startPractice() {
     await audioTransport.prepare(
       props.manifest.audioPath,
       props.manifest.audioOffset,
-      props.manifest.duration
+      props.manifest.duration,
+      props.manifest.audioSegments
     )
     startStage = 'requestMicrophonePermission'
     await requestMicrophonePermission()

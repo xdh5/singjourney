@@ -23,9 +23,9 @@
     />
 
     <voice-selector
-      :selected="selectedVoice"
+      :range="selectedRange"
       :headphones-connected="headphonesConnected"
-      @change="selectVoice"
+      @range-change="selectRange"
       @headphones-change="selectHeadphonesMode"
     />
     <scroll-view
@@ -103,7 +103,7 @@ import {
   recordCompletedPractice,
   type CompletedPracticeEvent
 } from '../../services/practice/statistics'
-import { fetchPracticeManifest, type VoicePreset } from '../../services/practice/catalog'
+import { fetchPracticeManifest } from '../../services/practice/catalog'
 import { usePracticeCatalogStore } from '../../stores/practice-catalog'
 import { usePracticeFavoritesStore } from '../../stores/practice-favorites'
 import { useAuthenticationStore } from '../../stores/authentication'
@@ -113,11 +113,13 @@ import {
   releasePageScreenAwake
 } from '../../utils/recording/screen-awake'
 import {
-  isVoicePreset,
-  clearLocalVoicePreset,
-  readLocalVoicePreset,
-  readStoredLocalVoicePreset,
-  storeLocalVoicePreset
+  clearLocalVocalRange,
+  isVocalRange,
+  readLocalVocalRange,
+  readStoredLocalVocalRange,
+  storeLocalVocalRange,
+  vocalRangeFromLegacyVoice,
+  type VocalRange
 } from '../../services/account/preferences'
 
 const { t } = useI18n()
@@ -135,17 +137,13 @@ const categories = computed(() => [
   { key: 'favorites', name: t('practice.categories.favorites') },
   ...catalogCategories.value
 ])
-const selectedVoice = ref<VoicePreset>(
-  isVoicePreset(session.value?.user.preferred_voice_preset)
-    ? session.value.user.preferred_voice_preset
-    : readLocalVoicePreset()
-)
+const selectedRange = ref<VocalRange>(readSessionVocalRange() ?? readLocalVocalRange())
 const selectedCategory = ref('favorites')
 const headphonesConnected = ref(false)
 const activeManifest = ref<PracticeManifest | null>(null)
 const activeExerciseTitle = ref('')
 const PRACTICE_SCREEN_AWAKE_OWNER = 'practice-page'
-let voicePreferenceUpdate = Promise.resolve()
+let rangePreferenceUpdate = Promise.resolve()
 
 const visibleExercises = computed(() =>
   selectedCategory.value === 'favorites'
@@ -164,10 +162,8 @@ void catalogStore.refresh().catch(() => {})
 onShow(() => {
   void keepScreenAwakeWhilePageOpen(PRACTICE_SCREEN_AWAKE_OWNER)
   setPageTitle('nav.practice')
-  const serverVoice = session.value?.user.preferred_voice_preset
-  if (isVoicePreset(serverVoice)) {
-    selectedVoice.value = serverVoice
-  }
+  const serverRange = readSessionVocalRange()
+  if (serverRange) selectedRange.value = serverRange
   void catalogStore.refresh().catch(() => {})
   void favoritesStore.refresh()
 })
@@ -185,14 +181,20 @@ function resetPageSession() {
   activeExerciseTitle.value = ''
 }
 
-function selectVoice(voice: VoicePreset) {
-  selectedVoice.value = voice
-  storeLocalVoicePreset(voice)
+function selectRange(range: VocalRange) {
+  selectedRange.value = range
+  storeLocalVocalRange(range)
   if (!session.value) return
-  voicePreferenceUpdate = voicePreferenceUpdate
-    .then(() => authenticationStore.updateVoicePreference(voice))
+  rangePreferenceUpdate = rangePreferenceUpdate
+    .then(() => authenticationStore.updateVocalRangePreference(range))
     .then(() => {
-      if (readStoredLocalVoicePreset() === voice) clearLocalVoicePreset()
+      const stored = readStoredLocalVocalRange()
+      if (
+        stored?.minimumMidi === range.minimumMidi &&
+        stored.maximumMidi === range.maximumMidi
+      ) {
+        clearLocalVocalRange()
+      }
     })
     .catch(() => undefined)
 }
@@ -222,11 +224,22 @@ async function startExercise(id: string) {
   if (!exercise?.enabled) return
   try {
     activeExerciseTitle.value = exercise.title
-    activeManifest.value = await fetchPracticeManifest(id, selectedVoice.value)
+    activeManifest.value = await fetchPracticeManifest(id, selectedRange.value)
   } catch {
     activeExerciseTitle.value = ''
     uni.showToast({ title: t('practice.catalogLoadFailed'), icon: 'none' })
   }
+}
+
+function readSessionVocalRange(): VocalRange | null {
+  const user = session.value?.user
+  if (!user) return null
+  const range = {
+    minimumMidi: user.preferred_range_min_midi,
+    maximumMidi: user.preferred_range_max_midi
+  }
+  if (isVocalRange(range)) return range
+  return vocalRangeFromLegacyVoice(user.preferred_voice_preset)
 }
 
 function closePracticeSession() {
