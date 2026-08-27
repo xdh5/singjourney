@@ -138,7 +138,9 @@ const categories = computed(() => [
   { key: 'favorites', name: t('practice.categories.favorites') },
   ...catalogCategories.value
 ])
-const selectedRange = ref<VocalRange>(readSessionVocalRange() ?? readLocalVocalRange())
+const selectedRange = ref<VocalRange>(
+  readStoredLocalVocalRange() ?? readSessionVocalRange() ?? readLocalVocalRange()
+)
 const selectedCategory = ref('favorites')
 const headphonesConnected = ref(false)
 const activeManifest = ref<PracticeManifest | null>(null)
@@ -163,8 +165,14 @@ void catalogStore.refresh().catch(() => {})
 onShow(() => {
   void keepScreenAwakeWhilePageOpen(PRACTICE_SCREEN_AWAKE_OWNER)
   setPageTitle('nav.practice')
-  const serverRange = readSessionVocalRange()
-  if (serverRange) selectedRange.value = serverRange
+  const pendingRange = readStoredLocalVocalRange()
+  if (pendingRange) {
+    selectedRange.value = pendingRange
+    queueRangePreferenceUpdate(pendingRange)
+  } else {
+    const serverRange = readSessionVocalRange()
+    if (serverRange) selectedRange.value = serverRange
+  }
   void catalogStore.refresh().catch(() => {})
   void favoritesStore.refresh()
 })
@@ -185,19 +193,31 @@ function resetPageSession() {
 function selectRange(range: VocalRange) {
   selectedRange.value = range
   storeLocalVocalRange(range)
+  queueRangePreferenceUpdate(range)
+}
+
+function queueRangePreferenceUpdate(range: VocalRange) {
   if (!session.value) return
   rangePreferenceUpdate = rangePreferenceUpdate
     .then(() => authenticationStore.updateVocalRangePreference(range))
-    .then(() => {
+    .then((updatedSession) => {
+      const savedRange = {
+        minimumMidi: updatedSession.user.preferred_range_min_midi,
+        maximumMidi: updatedSession.user.preferred_range_max_midi
+      }
+      if (!isVocalRange(savedRange) || !sameVocalRange(savedRange, range)) {
+        throw new Error('服务器未确认保存音域')
+      }
       const stored = readStoredLocalVocalRange()
-      if (
-        stored?.minimumMidi === range.minimumMidi &&
-        stored.maximumMidi === range.maximumMidi
-      ) {
+      if (stored && sameVocalRange(stored, range)) {
         clearLocalVocalRange()
       }
     })
     .catch(() => undefined)
+}
+
+function sameVocalRange(left: VocalRange, right: VocalRange) {
+  return left.minimumMidi === right.minimumMidi && left.maximumMidi === right.maximumMidi
 }
 
 function selectCategory(category: string) {

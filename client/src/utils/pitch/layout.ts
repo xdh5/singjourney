@@ -1,6 +1,7 @@
 import type { WindowMetrics } from '../window-metrics'
 
 export const LIVE_PITCH_AXIS_WIDTH = 52
+export const LIVE_PITCH_ROW_HEIGHT = 18
 export const LIVE_PITCH_PIXELS_PER_SECOND = 72
 export const LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS = 1000 / 60
 export const LIVE_PITCH_PCM_RENDER_INTERVAL_MS = 1000 / 30

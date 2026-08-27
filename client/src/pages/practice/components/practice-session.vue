@@ -72,6 +72,7 @@ import {
   LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS,
   LIVE_PITCH_COMMAND_RENDER_INTERVAL_MS,
   LIVE_PITCH_PCM_RENDER_INTERVAL_MS,
+  LIVE_PITCH_ROW_HEIGHT,
   LIVE_PITCH_PIXELS_PER_SECOND
 } from '../../../utils/pitch/layout'
 import { createAudioExportSession } from '../../../utils/share'
@@ -137,9 +138,11 @@ type SessionStatus =
 
 const AXIS_WIDTH = LIVE_PITCH_AXIS_WIDTH
 const ROW_PADDING = 2
+const ROW_HEIGHT = LIVE_PITCH_ROW_HEIGHT
 const PIXELS_PER_SECOND = LIVE_PITCH_PIXELS_PER_SECOND
 const USER_PITCH_VIEW_PADDING = 2
 const USER_PITCH_MAXIMUM_EXPANSION = 12
+let viewportMaximumMidi: number | null = null
 const DIRECT_RENDER_INTERVAL_MS = LIVE_PITCH_DIRECT_RENDER_INTERVAL_MS
 const PCM_RENDER_INTERVAL_MS = LIVE_PITCH_PCM_RENDER_INTERVAL_MS
 const COMMAND_CANVAS_RENDER_INTERVAL_MS = LIVE_PITCH_COMMAND_RENDER_INTERVAL_MS
@@ -788,16 +791,33 @@ function drawCanvas() {
   const viewStart =
     displayPosition - (plotWidth * LIVE_PITCH_PLAYHEAD_RATIO) / PIXELS_PER_SECOND
   const viewEnd = viewStart + plotWidth / PIXELS_PER_SECOND
-  const visibleUserRange = findVisibleUserRange(viewStart, viewEnd)
-  const minimumMidi = Math.min(
-    props.manifest.range.minimumMidi - ROW_PADDING,
-    visibleUserRange.minimumMidi - USER_PITCH_VIEW_PADDING
-  )
-  const maximumMidi = Math.max(
-    props.manifest.range.maximumMidi + ROW_PADDING,
-    visibleUserRange.maximumMidi + USER_PITCH_VIEW_PADDING
-  )
-  const rowHeight = height / (maximumMidi - minimumMidi + 1)
+  const visibleRowCount = height / ROW_HEIGHT
+  const rangeCenterMidi =
+    (props.manifest.range.minimumMidi + props.manifest.range.maximumMidi) / 2
+  const latestVisibleMidi = findLatestVisibleUserMidi(viewStart, viewEnd)
+  viewportMaximumMidi ??= rangeCenterMidi + visibleRowCount / 2 - 0.5
+  if (latestVisibleMidi !== null) {
+    const viewportMinimumMidi = viewportMaximumMidi - visibleRowCount + 1
+    if (latestVisibleMidi < viewportMinimumMidi + USER_PITCH_VIEW_PADDING) {
+      viewportMaximumMidi =
+        Math.floor(latestVisibleMidi) - USER_PITCH_VIEW_PADDING + visibleRowCount - 1
+    } else if (latestVisibleMidi > viewportMaximumMidi - USER_PITCH_VIEW_PADDING) {
+      viewportMaximumMidi = Math.ceil(latestVisibleMidi) + USER_PITCH_VIEW_PADDING
+    }
+    const lowestAllowedMidi =
+      props.manifest.range.minimumMidi - USER_PITCH_MAXIMUM_EXPANSION - ROW_PADDING
+    const highestAllowedMidi =
+      props.manifest.range.maximumMidi + USER_PITCH_MAXIMUM_EXPANSION + ROW_PADDING
+    viewportMaximumMidi = Math.max(
+      lowestAllowedMidi + visibleRowCount - 1,
+      Math.min(highestAllowedMidi, viewportMaximumMidi)
+    )
+  }
+  const minimumMidi =
+    props.manifest.range.minimumMidi - USER_PITCH_MAXIMUM_EXPANSION - ROW_PADDING
+  const maximumMidi =
+    props.manifest.range.maximumMidi + USER_PITCH_MAXIMUM_EXPANSION + ROW_PADDING
+  const rowHeight = ROW_HEIGHT
 
   const pitchLayer = {
     context: ctx,
@@ -805,7 +825,7 @@ function drawCanvas() {
     width,
     height,
     axisWidth: AXIS_WIDTH,
-    viewportMaxMidi: maximumMidi,
+    viewportMaxMidi: viewportMaximumMidi,
     rowHeight,
     minimumMidi,
     maximumMidi
@@ -816,7 +836,7 @@ function drawCanvas() {
     if (note.end < viewStart || note.start > viewEnd) continue
     const x = (note.start - viewStart) * PIXELS_PER_SECOND
     const endX = (note.end - viewStart) * PIXELS_PER_SECOND
-    const y = (maximumMidi - note.midi + 0.24) * rowHeight
+    const y = (viewportMaximumMidi - note.midi + 0.24) * rowHeight
     setFill(ctx, 'rgba(87, 174, 145, 0.34)')
     ctx.fillRect(x, y, Math.max(2, endX - x), Math.max(3, rowHeight * 0.52))
   }
@@ -829,7 +849,7 @@ function drawCanvas() {
     endTime: viewEnd,
     width: plotWidth,
     pixelsPerSecond: PIXELS_PER_SECOND,
-    maximumMidi,
+    maximumMidi: viewportMaximumMidi,
     rowHeight,
     showLatestPoint: status.value === 'recording',
     liveTime: status.value === 'recording' ? displayPosition : undefined
@@ -877,20 +897,14 @@ function setStroke(ctx: any, color: string, width: number) {
   }
 }
 
-function findVisibleUserRange(viewStart: number, viewEnd: number) {
-  let minimumMidi = props.manifest.range.minimumMidi
-  let maximumMidi = props.manifest.range.maximumMidi
-  const lowerLimit = minimumMidi - USER_PITCH_MAXIMUM_EXPANSION
-  const upperLimit = maximumMidi + USER_PITCH_MAXIMUM_EXPANSION
+function findLatestVisibleUserMidi(viewStart: number, viewEnd: number) {
   for (let index = userPoints.length - 1; index >= 0; index -= 1) {
     const point = userPoints[index]
     if (point.time < viewStart - 0.25) break
     if (point.time > viewEnd || point.midi === null) continue
-    const midi = Math.max(lowerLimit, Math.min(upperLimit, point.midi))
-    minimumMidi = Math.min(minimumMidi, midi)
-    maximumMidi = Math.max(maximumMidi, midi)
+    return point.midi
   }
-  return { minimumMidi, maximumMidi }
+  return null
 }
 
 function formatTime(seconds: number) {
