@@ -80,7 +80,7 @@
           <button
             class="editor-button primary"
             :disabled="savingProfile"
-            @tap="confirmLogin"
+            @tap="confirmProfile"
           >
             {{ t('account.confirmLogin') }}
           </button>
@@ -135,7 +135,7 @@ function openPracticeStats() {
     confirmText: t('account.login'),
     cancelText: t('account.continueLocal'),
     success: (result) => {
-      if (result.confirm) showLoginEditor('/pages/practice-stats/index')
+      if (result.confirm) void loginAndContinue('/pages/practice-stats/index')
       else if (result.cancel) open('/pages/practice-stats/index')
     }
   })
@@ -144,7 +144,7 @@ function openPracticeStats() {
 function handleAvatarTap() {
   authenticationStore.refreshFromStorage()
   if (!session.value) {
-    showLoginEditor('')
+    void loginAndContinue('')
     return
   }
   uni.showModal({
@@ -170,12 +170,30 @@ function copyAuthorEmail() {
   })
 }
 
-function showLoginEditor(destination: string) {
+function showProfileEditor(destination: string) {
   displayNameDraft.value = ''
   avatarPreview.value = session.value?.user.avatar_data_url || defaultAvatar
   avatarDataUrlDraft.value = undefined
   pendingDestination.value = destination || undefined
   profileEditorVisible.value = true
+}
+
+async function loginAndContinue(destination: string) {
+  uni.showLoading({ title: t('account.login'), mask: true })
+  try {
+    const loggedInSession = await authenticationStore.login(locale.value, {})
+    if (!loggedInSession) return
+    if (!loggedInSession.user.display_name && !loggedInSession.user.avatar_data_url) {
+      showProfileEditor(destination)
+      return
+    }
+    pendingDestination.value = destination || undefined
+    finishLogin()
+  } catch (error) {
+    reportLoginError(error)
+  } finally {
+    uni.hideLoading()
+  }
 }
 
 async function chooseAvatar(event: { detail: { avatarUrl?: string } }) {
@@ -193,7 +211,7 @@ function updateNickname(event: { detail: { value?: string } }) {
   displayNameDraft.value = event.detail.value || ''
 }
 
-async function confirmLogin() {
+async function confirmProfile() {
   const displayName = displayNameDraft.value.trim()
   if (!displayName && !avatarDataUrlDraft.value) {
     uni.showToast({ title: t('account.profileRequired'), icon: 'none' })
@@ -201,30 +219,34 @@ async function confirmLogin() {
   }
   savingProfile.value = true
   try {
-    await authenticationStore.login(locale.value, {
+    await authenticationStore.updateProfile({
       displayName: displayName || undefined,
       avatarDataUrl: avatarDataUrlDraft.value
     })
     finishLogin()
   } catch (error) {
-    const detail = error as {
-      name?: string
-      message?: string
-      errMsg?: string
-      statusCode?: number
-      responseData?: unknown
-    }
-    console.error('[登录错误] 微信登录失败', {
-      name: detail?.name,
-      message: detail?.message || detail?.errMsg,
-      statusCode: detail?.statusCode,
-      responseData: detail?.responseData,
-      rawError: error
-    })
-    uni.showToast({ title: t('account.loginFailed'), icon: 'none' })
+    reportLoginError(error)
   } finally {
     savingProfile.value = false
   }
+}
+
+function reportLoginError(error: unknown) {
+  const detail = error as {
+    name?: string
+    message?: string
+    errMsg?: string
+    statusCode?: number
+    responseData?: unknown
+  }
+  console.error('[登录错误] 微信登录或资料保存失败', {
+    name: detail?.name,
+    message: detail?.message || detail?.errMsg,
+    statusCode: detail?.statusCode,
+    responseData: detail?.responseData,
+    rawError: error
+  })
+  uni.showToast({ title: t('account.loginFailed'), icon: 'none' })
 }
 
 function cancelLogin() {

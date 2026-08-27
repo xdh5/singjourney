@@ -53,5 +53,18 @@ export const useAuthenticationStore = defineStore('authentication', () => {
     return session.value
   }
 
-  return { session, loggingIn, login, logout, refreshFromStorage, updateVocalRangePreference }
+  async function updateProfile(profile: UserProfileUpdate) {
+    session.value = await updateCurrentUserProfile(profile)
+    return session.value
+  }
+
+  return {
+    session,
+    loggingIn,
+    login,
+    logout,
+    refreshFromStorage,
+    updateProfile,
+    updateVocalRangePreference
+  }
 })
