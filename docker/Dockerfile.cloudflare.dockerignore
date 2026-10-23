@@ -1,0 +1,9 @@
+*
+!cloudflare
+!cloudflare/**
+cloudflare/node_modules
+cloudflare/.wrangler
+cloudflare/dist
+cloudflare/cloudflare-api.ps1
+cloudflare/export-data.py
+cloudflare/generate-scores.py

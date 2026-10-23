@@ -1,0 +1,14 @@
+services:
+  cloudflare:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cloudflare
+    volumes:
+      - ../cloudflare:/workspace/cloudflare
+      - cloudflare-node-modules:/workspace/cloudflare/node_modules
+      - ${APPDATA}/xdg.config/.wrangler:/root/.config/.wrangler
+    environment:
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+volumes:
+  cloudflare-node-modules:

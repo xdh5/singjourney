@@ -39,3 +39,7 @@ client/.test-build/
 .diagnostics/
 
 /generated/prisma
+
+# 云端迁移备份、构建和本地凭据
+.migration/
+cloudflare/.wrangler/

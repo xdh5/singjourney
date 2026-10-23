@@ -53,6 +53,8 @@ npm 与 Docker 客户端构建统一使用 `https://registry.npmmirror.com`。
 
 ## Docker 构建
 
+正式环境已迁移至 Cloudflare Workers、D1 与静态资源托管，不再依赖腾讯云。接口地址仍为 `https://singjourney.com/api/v1`。Cloudflare 构建和部署说明见 [部署说明](cloudflare/README.md)。下方 Python 服务端 Docker 配置保留用于本地开发与迁移回溯。
+
 在项目根目录执行。
 
 构建用于上传发布的微信小程序（固定连接正式接口）：
