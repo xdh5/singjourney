@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "singjourney-web",
+  "account_id": "6c9ea4b716d00c55c0afbcc94c4d95a8",
+  "compatibility_date": "2026-10-23",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": { "directory": "web-public", "not_found_handling": "single-page-application" }
+}

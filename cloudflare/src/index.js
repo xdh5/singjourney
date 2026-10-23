@@ -176,32 +176,41 @@ async function route(request, env) {
   if (path === '/health/live') return json({ status: 'ok' });
   if (path === '/health/ready') { await first(env, 'SELECT 1'); return json({ status: 'ready' }); }
   if (path === '/version') return json({ serverVersion: scores._version, apiMajor: 1 });
-  if (!path.startsWith('/api/v1/')) return env.ASSETS.fetch(request);
+  if (!path.startsWith('/api/v1/')) return env.WEB.fetch(request);
   const endpoint = path.slice('/api/v1'.length);
   if (['GET', 'HEAD'].includes(method) && endpoint.startsWith('/practice/assets/')) {
-    if (!Object.values(scores).some(row => row?.filename === endpoint.slice('/practice/assets/'.length))) fail(404, 'Practice asset not found');
-    const result = await env.ASSETS.fetch(request);
-    const headers = new Headers(result.headers);
+    const filename = endpoint.slice('/practice/assets/'.length);
+    if (!Object.values(scores).some(row => row?.filename === filename)) fail(404, 'Practice asset not found');
+    const metadata = await env.AUDIO.head(filename);
+    if (!metadata) fail(404, 'Practice asset not found');
+    const headers = new Headers();
+    metadata.writeHttpMetadata(headers);
     headers.set('Content-Type', 'audio/ogg');
     headers.set('Cache-Control', 'public,max-age=31536000,immutable');
+    headers.set('ETag', metadata.httpEtag);
     headers.set('Accept-Ranges', 'bytes');
+    headers.set('Last-Modified', metadata.uploaded.toUTCString());
+    if (request.headers.get('If-None-Match') === metadata.httpEtag) return new Response(null, { status: 304, headers });
+    if (method === 'HEAD') { headers.set('Content-Length', String(metadata.size)); return new Response(null, { headers }); }
     const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range') || '');
     const ifRange = request.headers.get('If-Range');
-    // 静态资源绑定未返回分段响应时补齐单段读取，保持播放器拖动兼容。
-    if (method === 'GET' && result.status === 200 && range && (!ifRange || ifRange === headers.get('ETag') || ifRange === headers.get('Last-Modified'))) {
-      const buffer = await result.arrayBuffer(), size = buffer.byteLength;
-      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
-      const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
-      if ((!range[1] && !range[2]) || start >= size || start > end) {
-        headers.set('Content-Range', `bytes */${size}`);
+    let selected;
+    if (range && (!ifRange || ifRange === metadata.httpEtag || ifRange === metadata.uploaded.toUTCString())) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, metadata.size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(metadata.size - 1, Number(range[2])) : metadata.size - 1;
+      if ((!range[1] && !range[2]) || start >= metadata.size || start > end) {
+        headers.set('Content-Range', `bytes */${metadata.size}`);
         headers.set('Content-Length', '0');
         return new Response(null, { status: 416, headers });
       }
-      headers.set('Content-Range', `bytes ${start}-${end}/${size}`);
-      headers.set('Content-Length', String(end - start + 1));
-      return new Response(buffer.slice(start, end + 1), { status: 206, headers });
+      selected = { offset: start, length: end - start + 1 };
+      headers.set('Content-Range', `bytes ${start}-${end}/${metadata.size}`);
     }
-    return new Response(result.body, { status: result.status, headers });
+    // R2 直接流式返回指定字节段，避免把母带全部读入 Workers 内存。
+    const object = await env.AUDIO.get(filename, selected ? { range: selected } : undefined);
+    if (!object) fail(404, 'Practice asset not found');
+    headers.set('Content-Length', String(selected?.length ?? object.size));
+    return new Response(object.body, { status: selected ? 206 : 200, headers });
   }
   if (method === 'GET' && endpoint === '/practice/catalog') return json(await catalog(env, english));
   const match = /^\/practice\/exercises\/([^/]+)\/manifest$/.exec(endpoint);

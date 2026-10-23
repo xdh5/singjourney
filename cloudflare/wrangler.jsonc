@@ -8,7 +8,8 @@
   "routes": [{ "pattern": "singjourney.com", "custom_domain": true }, { "pattern": "www.singjourney.com", "custom_domain": true }],
   "account_id": "6c9ea4b716d00c55c0afbcc94c4d95a8",
   "d1_databases": [{ "binding": "DB", "database_name": "singjourney", "database_id": "1536ec02-cbb3-40d2-bcfc-cf46bd18bcbf" }],
-  "assets": { "directory": "public", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/health/*", "/version"] },
+  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "singjourney-practice-audio" }],
+  "services": [{ "binding": "WEB", "service": "singjourney-web" }],
   "observability": { "enabled": true },
   "vars": { "AUTH_SESSION_DAYS": "30", "CORS_ORIGINS": "https://singjourney.com" }
 }

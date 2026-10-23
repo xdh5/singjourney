@@ -6,4 +6,12 @@ cloudflare/.wrangler
 cloudflare/dist
 cloudflare/cloudflare-api.ps1
 cloudflare/export-data.py
-cloudflare/generate-scores.py
+!server
+!server/app
+!server/app/**
+!server/pyproject.toml
+!client
+!client/dist
+!client/dist/h5
+!client/dist/h5/**
+server/**/__pycache__

@@ -43,3 +43,6 @@ client/.test-build/
 # 云端迁移备份、构建和本地凭据
 .migration/
 cloudflare/.wrangler/
+cloudflare/public/
+cloudflare/web-public/
+cloudflare/src/generated.json

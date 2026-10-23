@@ -1,0 +1,37 @@
+name: 资源迁移
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: 获取源码与已有发布产物
+        uses: actions/checkout@v6
+      - name: 构建资源上传工具
+        run: docker build --target tools -f docker/Dockerfile.cloudflare -t singjourney-tools .
+      - name: 将已有母带上传 R2
+        run: |
+          docker run --rm -e CLOUDFLARE_API_TOKEN -v "$PWD/cloudflare/public/api/v1/practice/assets:/audio:ro" singjourney-tools sh -ec '
+            for file in /audio/*.opus; do
+              npx wrangler r2 object put "singjourney-practice-audio/$(basename "$file")" --file "$file" --content-type audio/ogg --remote
+            done
+          '
+      - name: 复用已有 Web 产物并发布独立静态服务
+        run: |
+          mkdir -p client/dist/h5
+          cp -R cloudflare/public/assets cloudflare/public/index.html client/dist/h5/
+          docker build --target web -f docker/Dockerfile.cloudflare -t singjourney-web .
+          docker run --rm -e CLOUDFLARE_API_TOKEN singjourney-web
+      - name: 构建并发布接口
+        run: |
+          docker build -f docker/Dockerfile.cloudflare -t singjourney-api .
+          docker run --rm singjourney-api
+          docker run --rm -e CLOUDFLARE_API_TOKEN singjourney-api npx wrangler deploy
