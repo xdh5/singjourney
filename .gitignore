@@ -42,7 +42,16 @@ client/.test-build/
 
 # 云端迁移备份、构建和本地凭据
 .migration/
-cloudflare/.wrangler/
+server/.wrangler/
 cloudflare/public/
 cloudflare/web-public/
-cloudflare/src/generated.json
+server/src/generated.json
+
+# 微信构建生成的音频编码 Worker 与 WASM
+client/src/static/workers/audio-export.js
+client/src/static/workers/wasm-media-encoders-LICENSE.txt
+client/src/static/wasm/
+
+
+# 已退役的本机产物目录
+/cloudflare/

@@ -85,10 +85,7 @@ import {
   RECORDING_TYPE,
   storeRecording
 } from '../../utils/recording/storage'
-import {
-  createAudioExportSession,
-  hidePageShareMenu
-} from '../../utils/share'
+import { createAudioExportSession, hidePageShareMenu } from '../../utils/share'
 import { createAudibleAudioPlayer } from '../../utils/audio/player'
 import { createPitchCanvasSurface } from '../../utils/pitch/canvas'
 import { createPcmPreview, deleteTemporaryAudio } from '../../utils/audio/files'
@@ -128,7 +125,6 @@ import {
 } from '../../utils/recording/playback-session'
 import {
   connectRecorder,
-  createPausedRecorderPreview,
   pauseRecorder,
   recorderAnalysisConfig,
   recorderCapabilities,
@@ -153,10 +149,7 @@ import {
   TELEMETRY_EVENT,
   trackTelemetry
 } from '../../utils/telemetry'
-import {
-  createPracticeEventId,
-  recordCompletedPractice
-} from '../../services/practice/statistics'
+import { createPracticeEventId, recordCompletedPractice } from '../../services/practice/statistics'
 
 const SAMPLE_RATE = recorderAnalysisConfig.sampleRate
 const BUFFER_SIZE = recorderAnalysisConfig.frameSize
@@ -251,7 +244,6 @@ let recordingClockAt = 0
 let lastDetectedMidi = 60
 let pendingAction: 'save' | 'stop' | null = null
 let tempFilePath = ''
-let tempBlob: Blob | undefined
 let discardStop = false
 let currentRecordingName = ''
 const pcmBuffer = createPcmBuffer()
@@ -664,7 +656,7 @@ function followViewportToPitch(midi: number) {
   if (Math.abs(midi - viewportTargetMidi) > deadZone) setViewportTarget(midi)
 }
 
-async function handleStop(result: { tempFilePath: string; blob?: Blob }) {
+async function handleStop(result: { tempFilePath: string }) {
   void releaseRecordingScreenAwake()
   if (discardStop) {
     discardStop = false
@@ -683,13 +675,11 @@ async function handleStop(result: { tempFilePath: string; blob?: Blob }) {
     deleteTemporaryAudio(result.tempFilePath)
   }
   tempFilePath = completedAudioPath || result.tempFilePath
-  tempBlob = result.blob
-  playablePath.value =
-    recorderCapabilities.capturesPcmFrames
-      ? tempFilePath
-      : recorderCapabilities.realtimeFrames
-        ? ''
-        : tempFilePath
+  playablePath.value = recorderCapabilities.capturesPcmFrames
+    ? tempFilePath
+    : recorderCapabilities.realtimeFrames
+      ? ''
+      : tempFilePath
   isRecording.value = false
   clearTimer()
   clearRenderTimer()
@@ -758,7 +748,6 @@ async function persistCurrentRecording() {
     const recordingName = await resolveCurrentRecordingName()
     const stored = await storeRecording({
       tempFilePath: sourceTempFilePath,
-      blob: tempBlob,
       recording: {
         id,
         name: recordingName,
@@ -777,7 +766,6 @@ async function persistCurrentRecording() {
     currentRecordingName = stored.name
     currentRecordingId = stored.id
     tempFilePath = ''
-    tempBlob = undefined
     hasStarted.value = false
     playbackPosition.value = 0
     playbackStartPosition = 0
@@ -824,7 +812,6 @@ async function clearRecording() {
   playablePath.value = ''
   deleteTemporaryAudio(tempFilePath)
   tempFilePath = ''
-  tempBlob = undefined
   currentRecordingName = ''
   deleteTemporaryAudio(previewAudioPath)
   previewAudioPath = ''
@@ -862,11 +849,10 @@ function pcmChunks() {
 async function refreshPausedPlayback() {
   const requestId = ++pausedPreviewRequestId
   try {
-    const preview = recorderCapabilities.capturesPcmFrames
-      ? pcmBuffer.byteLength > 0 && pcmBuffer.byteLength === recordedPcmByteLength
+    const preview =
+      pcmBuffer.byteLength > 0 && pcmBuffer.byteLength === recordedPcmByteLength
         ? { tempFilePath: await createPcmPreview(pcmChunks(), pcmBuffer.byteLength) }
         : null
-      : await createPausedRecorderPreview()
     if (!preview) throw new Error('paused preview unavailable')
     if (requestId !== pausedPreviewRequestId || isRecording.value) {
       deleteTemporaryAudio(preview.tempFilePath)

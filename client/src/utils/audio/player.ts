@@ -13,7 +13,6 @@ function miniProgramAudioOutputOptions() {
 export function configureHeadphonesAudioMode(enabled: boolean) {
   headphonesAudioMode = enabled
 
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   return new Promise<void>((resolve) => {
     if (!wxApi.setInnerAudioOption) {
@@ -26,26 +25,17 @@ export function configureHeadphonesAudioMode(enabled: boolean) {
       fail: resolve
     })
   })
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  return Promise.resolve()
-  // #endif
 }
 
 export function createAudibleAudioPlayer() {
   const outputOptions = miniProgramAudioOutputOptions()
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   wxApi.setInnerAudioOption?.(outputOptions)
-  // #endif
 
   const player = uni.createInnerAudioContext()
   player.volume = MAXIMUM_PLAYBACK_VOLUME
 
-  // #ifdef MP-WEIXIN
   ;(player as any).obeyMuteSwitch = outputOptions.obeyMuteSwitch
-  // #endif
 
   return player
 }

@@ -84,7 +84,6 @@ import VoiceprintConsentSheet from '../../../components/voiceprint-consent-sheet
 import { createPracticeAudioTransport } from '../../../utils/practice/audio-transport'
 import {
   connectRecorder,
-  createPausedRecorderPreview,
   pauseRecorder,
   recorderAnalysisConfig,
   recorderCapabilities,
@@ -171,7 +170,6 @@ let initialPreRollPcmByteLength = 0
 let replayVoiceOffsetSeconds = 0
 let initialRecordingGateOpened = false
 const recordingPath = ref('')
-let recordingBlob: Blob | undefined
 let temporaryPcmPreview = ''
 let pausedPreviewRequestId = 0
 let discardPendingRecording = false
@@ -221,14 +219,8 @@ const canUseCompletedRecording = computed(
 
 function currentCapturedPcmPosition() {
   if (!recorderCapabilities.capturesPcmFrames) return currentPosition()
-  const capturedByteLength = Math.max(
-    0,
-    recordedPcmByteLength - initialPreRollPcmByteLength
-  )
-  return (
-    capturedByteLength /
-    (recorderAnalysisConfig.sampleRate * Int16Array.BYTES_PER_ELEMENT)
-  )
+  const capturedByteLength = Math.max(0, recordedPcmByteLength - initialPreRollPcmByteLength)
+  return capturedByteLength / (recorderAnalysisConfig.sampleRate * Int16Array.BYTES_PER_ELEMENT)
 }
 const canStartOrStop = computed(
   () =>
@@ -356,9 +348,9 @@ async function startPractice() {
     )
     startStage = 'requestMicrophonePermission'
     await requestMicrophonePermission()
-    resumeRecorderOnGate = recorderCapabilities.startsPausedForAudioGate
+    resumeRecorderOnGate = false
     startStage = 'startRecorder'
-    await startRecorder({ startPaused: recorderCapabilities.startsPausedForAudioGate })
+    await startRecorder()
     recordingSessionOpen = true
     if (!pageVisible) {
       recordingPausedAt = 0
@@ -418,7 +410,8 @@ function openRecordingGate() {
   })
   if (!initialRecordingGateOpened) {
     replayVoiceOffsetSeconds =
-      initialPreRollPcmByteLength / (recorderAnalysisConfig.sampleRate * Int16Array.BYTES_PER_ELEMENT)
+      initialPreRollPcmByteLength /
+      (recorderAnalysisConfig.sampleRate * Int16Array.BYTES_PER_ELEMENT)
     initialRecordingGateOpened = true
   }
   if (!practiceEventId) {
@@ -504,17 +497,12 @@ async function refreshPausedPreview() {
   const requestId = ++pausedPreviewRequestId
   try {
     let previewPath = ''
-    let previewBlob: Blob | undefined
     if (
       recorderCapabilities.capturesPcmFrames &&
       pcmBuffer.byteLength > 0 &&
       pcmBuffer.byteLength === recordedPcmByteLength
     ) {
       previewPath = await createPcmPreview(pcmBuffer.chunks(), pcmBuffer.byteLength)
-    } else if (recorderCapabilities.startsPausedForAudioGate) {
-      const preview = await createPausedRecorderPreview()
-      previewPath = preview?.tempFilePath || ''
-      previewBlob = preview?.blob
     }
     if (
       !previewPath ||
@@ -522,14 +510,12 @@ async function refreshPausedPreview() {
       status.value !== 'recordingPaused'
     ) {
       deleteTemporaryAudio(previewPath)
-      if (previewPath)
-        console.info('[录音诊断] 丢弃已经过期的伴奏练声暂停预览', { requestId })
+      if (previewPath) console.info('[录音诊断] 丢弃已经过期的伴奏练声暂停预览', { requestId })
       return
     }
     deleteTemporaryAudio(temporaryPcmPreview)
     temporaryPcmPreview = previewPath
     recordingPath.value = previewPath
-    recordingBlob = previewBlob
     void audioTransport.prepareReplay(previewPath).catch(() => {})
   } catch {
     if (requestId !== pausedPreviewRequestId || status.value !== 'recordingPaused') return
@@ -559,7 +545,7 @@ function endPractice() {
   stopRecorder()
 }
 
-async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
+async function finishRecording(result: { tempFilePath: string }) {
   recordingSessionOpen = false
   if (discardPendingRecording) {
     discardPendingRecording = false
@@ -581,7 +567,6 @@ async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
     deleteTemporaryAudio(result.tempFilePath)
   }
   recordingPath.value = fallbackPath || result.tempFilePath
-  recordingBlob = result.blob
   pcmBuffer.reset()
   recordedPcmByteLength = 0
   status.value = 'completed'
@@ -599,7 +584,6 @@ async function finishRecording(result: { tempFilePath: string; blob?: Blob }) {
       endedAt: new Date().toISOString()
     })
   }
-  void recordingBlob
 }
 
 function toggleReplay() {
@@ -674,7 +658,6 @@ function clearPractice() {
   deleteTemporaryAudio(temporaryPcmPreview)
   temporaryPcmPreview = ''
   recordingPath.value = ''
-  recordingBlob = undefined
   position.value = 0
   userPoints.splice(0)
   pcmBuffer.reset()
@@ -697,7 +680,6 @@ async function savePractice() {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     await storeRecording({
       tempFilePath: recordingPath.value,
-      blob: recordingBlob,
       recording: {
         id,
         name: props.exerciseTitle,
@@ -788,12 +770,10 @@ function drawCanvas() {
     targetDisplayPosition,
     status.value === 'recording' || status.value === 'playing'
   )
-  const viewStart =
-    displayPosition - (plotWidth * LIVE_PITCH_PLAYHEAD_RATIO) / PIXELS_PER_SECOND
+  const viewStart = displayPosition - (plotWidth * LIVE_PITCH_PLAYHEAD_RATIO) / PIXELS_PER_SECOND
   const viewEnd = viewStart + plotWidth / PIXELS_PER_SECOND
   const visibleRowCount = height / ROW_HEIGHT
-  const rangeCenterMidi =
-    (props.manifest.range.minimumMidi + props.manifest.range.maximumMidi) / 2
+  const rangeCenterMidi = (props.manifest.range.minimumMidi + props.manifest.range.maximumMidi) / 2
   const latestVisibleMidi = findLatestVisibleUserMidi(viewStart, viewEnd)
   viewportMaximumMidi ??= rangeCenterMidi + visibleRowCount / 2 - 0.5
   if (latestVisibleMidi !== null) {
@@ -813,10 +793,8 @@ function drawCanvas() {
       Math.min(highestAllowedMidi, viewportMaximumMidi)
     )
   }
-  const minimumMidi =
-    props.manifest.range.minimumMidi - USER_PITCH_MAXIMUM_EXPANSION - ROW_PADDING
-  const maximumMidi =
-    props.manifest.range.maximumMidi + USER_PITCH_MAXIMUM_EXPANSION + ROW_PADDING
+  const minimumMidi = props.manifest.range.minimumMidi - USER_PITCH_MAXIMUM_EXPANSION - ROW_PADDING
+  const maximumMidi = props.manifest.range.maximumMidi + USER_PITCH_MAXIMUM_EXPANSION + ROW_PADDING
   const rowHeight = ROW_HEIGHT
 
   const pitchLayer = {

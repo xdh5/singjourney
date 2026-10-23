@@ -30,9 +30,6 @@ function readWindowInfo(): any {
   try {
     const current = (uni as any).getWindowInfo?.()
     if (current) return current
-    // #ifndef MP-WEIXIN
-    return uni.getSystemInfoSync()
-    // #endif
   } catch {
     return null
   }

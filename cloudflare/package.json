@@ -1,7 +1,0 @@
-{
-  "name": "singjourney-cloudflare",
-  "private": true,
-  "type": "module",
-  "scripts": { "deploy": "wrangler deploy", "build": "wrangler deploy --dry-run --outdir dist" },
-  "devDependencies": { "wrangler": "4.152.0" }
-}

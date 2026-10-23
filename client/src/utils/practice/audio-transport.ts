@@ -1,5 +1,3 @@
-import { createAudibleAudioPlayer } from '../audio/player'
-
 export type PracticeTransportCallbacks = {
   onStarted: () => void
   onEnded: () => void
@@ -28,12 +26,7 @@ const COMPRESSOR_ATTACK_SECONDS = 0.003
 const COMPRESSOR_RELEASE_SECONDS = 0.18
 
 export function createPracticeAudioTransport() {
-  let webAudioPlatform = false
-  // #ifdef H5 || MP-WEIXIN
-  webAudioPlatform = true
-  // #endif
-
-  return webAudioPlatform ? createScheduledTransport() : createFallbackTransport()
+  return createScheduledTransport()
 }
 
 function createScheduledTransport() {
@@ -114,10 +107,7 @@ function createScheduledTransport() {
     callbacks = nextCallbacks
     mode = 'replay'
     pausedAt = 0
-    replayEndsAt = Math.min(
-      segmentDuration,
-      endsAt ?? segmentDuration
-    )
+    replayEndsAt = Math.min(segmentDuration, endsAt ?? segmentDuration)
     scheduleSources(
       true,
       0,
@@ -160,14 +150,9 @@ function createScheduledTransport() {
     includeAccompaniment = true
   ) {
     ignoreEnded = false
-    const startLeadSeconds = includeVoice
-      ? REPLAY_START_LEAD_SECONDS
-      : PRACTICE_START_LEAD_SECONDS
+    const startLeadSeconds = includeVoice ? REPLAY_START_LEAD_SECONDS : PRACTICE_START_LEAD_SECONDS
     scheduledAt = Number(audioContext.currentTime) + startLeadSeconds
-    const duration = Math.max(
-      0,
-      Math.min(segmentDuration, endsAt ?? segmentDuration) - offset
-    )
+    const duration = Math.max(0, Math.min(segmentDuration, endsAt ?? segmentDuration) - offset)
     if (includeAccompaniment) {
       const scheduledSegments = sliceAudioSegments(audioSegments, offset, duration)
       accompanimentSources = scheduledSegments.map((segment, index) => {
@@ -177,11 +162,7 @@ function createScheduledTransport() {
           includeVoice ? REPLAY_ACCOMPANIMENT_GAIN : 1
         )
         if (index === scheduledSegments.length - 1) source.onended = handleTransportEnded
-        source.start(
-          scheduledAt + segment.timelineOffset,
-          segment.sourceOffset,
-          segment.duration
-        )
+        source.start(scheduledAt + segment.timelineOffset, segment.sourceOffset, segment.duration)
         return source
       })
     }
@@ -318,11 +299,7 @@ function createScheduledTransport() {
   }
 }
 
-function sliceAudioSegments(
-  segments: PracticeAudioSegment[],
-  offset: number,
-  duration: number
-) {
+function sliceAudioSegments(segments: PracticeAudioSegment[], offset: number, duration: number) {
   const result: Array<PracticeAudioSegment & { timelineOffset: number }> = []
   let skipped = Math.max(0, offset)
   let remaining = Math.max(0, duration)
@@ -345,13 +322,7 @@ function sliceAudioSegments(
 }
 
 function createAudioContext(): any {
-  // #ifdef H5
-  return new AudioContext()
-  // #endif
-  // #ifdef MP-WEIXIN
   return (globalThis as any).wx.createWebAudioContext()
-  // #endif
-  return null
 }
 
 async function resumeContext(context: any) {
@@ -431,15 +402,12 @@ async function decodeFile(context: any, path: string): Promise<any> {
 }
 
 async function readAudioFile(path: string): Promise<ArrayBuffer> {
-  // #ifdef H5
-  const response = await fetch(path)
-  if (!response.ok) throw new Error(`audio load failed: ${response.status}`)
-  return response.arrayBuffer()
-  // #endif
-
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
-  const filePath = /^https?:\/\//i.test(path) ? await cacheRemoteAudio(wxApi, path) : path.startsWith('/') ? path.slice(1) : path
+  const filePath = /^https?:\/\//i.test(path)
+    ? await cacheRemoteAudio(wxApi, path)
+    : path.startsWith('/')
+      ? path.slice(1)
+      : path
   return new Promise((resolve, reject) => {
     wxApi.getFileSystemManager().readFile({
       filePath,
@@ -447,7 +415,6 @@ async function readAudioFile(path: string): Promise<ArrayBuffer> {
       fail: reject
     })
   })
-  // #endif
 
   throw new Error('scheduled audio is unavailable')
 }
@@ -487,144 +454,4 @@ function stableHash(value: string) {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
-}
-
-function createFallbackTransport() {
-  const accompaniment = createAudibleAudioPlayer()
-  const voice = createAudibleAudioPlayer()
-  let mode: TransportMode = 'idle'
-  let startedAt = 0
-  let pausedAt = 0
-  let callbacks: PracticeTransportCallbacks | null = null
-  let segmentOffset = 0
-  let segmentDuration = Number.POSITIVE_INFINITY
-  let replayIncludesAccompaniment = true
-  let replayVoicePath = ''
-  let endTimer: ReturnType<typeof setTimeout> | undefined
-
-  function scheduleEnd() {
-    if (endTimer) clearTimeout(endTimer)
-    if (!Number.isFinite(segmentDuration)) return
-    endTimer = setTimeout(() => {
-      mode = 'idle'
-      accompaniment.stop()
-      voice.stop()
-      callbacks?.onEnded()
-    }, Math.max(0, segmentDuration - pausedAt) * 1000)
-  }
-
-  accompaniment.onPlay(() => {
-    startedAt = Date.now()
-    callbacks?.onStarted()
-  })
-  voice.onPlay(() => {
-    if (mode !== 'replay' || replayIncludesAccompaniment) return
-    startedAt = Date.now()
-    callbacks?.onStarted()
-  })
-  accompaniment.onEnded(handleFallbackEnded)
-  voice.onEnded(() => {
-    if (mode === 'replay' && !replayIncludesAccompaniment) handleFallbackEnded()
-  })
-  accompaniment.onError(() => callbacks?.onError())
-  voice.onError(() => callbacks?.onError())
-
-  function handleFallbackEnded() {
-    if (mode !== 'practice' && mode !== 'replay') return
-    mode = 'idle'
-    if (endTimer) clearTimeout(endTimer)
-    callbacks?.onEnded()
-  }
-
-  return {
-    async prepare(
-      path: string,
-      audioOffset = 0,
-      duration?: number,
-      _segments?: PracticeAudioSegment[]
-    ) {
-      accompaniment.src = path
-      segmentOffset = Math.max(0, audioOffset)
-      segmentDuration = duration === undefined ? Number.POSITIVE_INFINITY : Math.max(0, duration)
-    },
-    async prepareReplay(voicePath: string) {
-      if (replayVoicePath === voicePath) return
-      replayVoicePath = voicePath
-      voice.src = voicePath
-    },
-    async startPractice(nextCallbacks: PracticeTransportCallbacks) {
-      callbacks = nextCallbacks
-      mode = 'practice'
-      pausedAt = 0
-      accompaniment.volume = 1
-      accompaniment.seek(segmentOffset)
-      accompaniment.play()
-      scheduleEnd()
-    },
-    async startReplay(
-      voicePath: string,
-      nextCallbacks: PracticeTransportCallbacks,
-      _endsAt?: number,
-      voiceOffset = 0,
-      includeAccompaniment = true
-    ) {
-      callbacks = nextCallbacks
-      mode = 'replay'
-      pausedAt = 0
-      replayIncludesAccompaniment = includeAccompaniment
-      accompaniment.volume = REPLAY_ACCOMPANIMENT_GAIN
-      voice.volume = 1
-      if (replayVoicePath !== voicePath) {
-        replayVoicePath = voicePath
-        voice.src = voicePath
-      }
-      accompaniment.seek(segmentOffset)
-      voice.seek(voiceOffset)
-      if (replayIncludesAccompaniment) accompaniment.play()
-      voice.play()
-      scheduleEnd()
-    },
-    pauseReplay() {
-      pausedAt = Math.max(0, (Date.now() - startedAt) / 1000)
-      mode = 'paused'
-      if (endTimer) clearTimeout(endTimer)
-      if (replayIncludesAccompaniment) accompaniment.pause()
-      voice.pause()
-    },
-    pausePractice() {
-      pausedAt = Math.max(0, (Date.now() - startedAt) / 1000)
-      mode = 'paused'
-      if (endTimer) clearTimeout(endTimer)
-      accompaniment.pause()
-    },
-    resumePractice(nextCallbacks: PracticeTransportCallbacks) {
-      callbacks = nextCallbacks
-      mode = 'practice'
-      if (replayIncludesAccompaniment) accompaniment.play()
-      scheduleEnd()
-    },
-    resumeReplay() {
-      mode = 'replay'
-      accompaniment.play()
-      voice.play()
-      scheduleEnd()
-    },
-    position() {
-      return mode === 'paused' ? pausedAt : pausedAt + Math.max(0, (Date.now() - startedAt) / 1000)
-    },
-    hasStarted() {
-      return mode === 'practice' || mode === 'replay'
-    },
-    stop() {
-      mode = 'idle'
-      if (endTimer) clearTimeout(endTimer)
-      accompaniment.stop()
-      voice.stop()
-    },
-    destroy() {
-      accompaniment.destroy()
-      voice.destroy()
-      if (endTimer) clearTimeout(endTimer)
-    }
-  }
 }

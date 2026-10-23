@@ -1,0 +1,13 @@
+{
+  "name": "@singjourney/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  },
+  "version": "0.2.0"
+}

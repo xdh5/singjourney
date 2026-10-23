@@ -9,9 +9,8 @@
 - 只使用 Docker 构建，不得使用本机的 `npm`、Vite 或 Python 重新构建。
 - 每次修改客户端后都自动构建微信小程序，不需要用户再次提醒；不构建 Web、iOS 或 Android：
   `docker compose --env-file .env -f docker/compose.client.yml run --build --rm client-build-wx`
-- 永远不要自动执行正式四端构建。只有用户明确要求“完整构建”时，才运行：
-  `docker compose -f docker/compose.client.yml run --build --rm client-build`
-- 修改 `server/`、`deploy/`、`docker/Dockerfile.server` 或 `docker/compose.server.yml` 时，运行：
+- 项目只保留微信小程序与 Cloudflare 后端，不得添加或构建 Web、iOS、Android 等其他客户端。
+- 修改 `server/`、`docker/Dockerfile.server` 或 `docker/compose.server.yml` 时，运行：
   `docker compose -f docker/compose.server.yml build api`
 - 只有修改练声音频资源生成器或其输入资源时，才使用 `practice-assets` 服务重新生成资源。
 

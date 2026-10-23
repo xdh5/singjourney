@@ -1,13 +1,5 @@
-type WebWakeLockSentinel = {
-  released?: boolean
-  release: () => Promise<void>
-  addEventListener?: (type: 'release', listener: () => void) => void
-}
-
 let recordingActive = false
 const awakePageOwners = new Set<string>()
-let webWakeLock: WebWakeLockSentinel | null = null
-let webVisibilityListenerInstalled = false
 let nativeScreenAwakeUpdate = Promise.resolve()
 
 /** 录音采集期间保持屏幕常亮。 */
@@ -37,69 +29,9 @@ export async function releasePageScreenAwake(owner: string) {
 async function refreshScreenAwake() {
   const shouldKeepScreenAwake = recordingActive || awakePageOwners.size > 0
 
-  // #ifdef H5
-  installWebVisibilityListener()
-  if (shouldKeepScreenAwake) {
-    await requestWebWakeLock()
-    return
-  }
-  const wakeLock = webWakeLock
-  webWakeLock = null
-  if (wakeLock && !wakeLock.released) {
-    try {
-      await wakeLock.release()
-    } catch {
-      // 页面隐藏期间，浏览器可能已经撤销屏幕常亮锁。
-    }
-  }
-  // #endif
-
-  // #ifndef H5
   await setUniKeepScreenOn(shouldKeepScreenAwake)
-  // #endif
 }
 
-// #ifdef H5
-function installWebVisibilityListener() {
-  if (webVisibilityListenerInstalled || typeof document === 'undefined') return
-  webVisibilityListenerInstalled = true
-  document.addEventListener('visibilitychange', () => {
-    if (shouldKeepScreenAwake() && document.visibilityState === 'visible')
-      void requestWebWakeLock()
-  })
-}
-
-async function requestWebWakeLock() {
-  if (
-    !shouldKeepScreenAwake() ||
-    webWakeLock ||
-    typeof document === 'undefined' ||
-    document.visibilityState !== 'visible'
-  )
-    return
-  const wakeLockApi = (globalThis.navigator as any)?.wakeLock
-  if (!wakeLockApi?.request) return
-  try {
-    const requestedLock = (await wakeLockApi.request('screen')) as WebWakeLockSentinel
-    if (!shouldKeepScreenAwake()) {
-      await requestedLock.release()
-      return
-    }
-    webWakeLock = requestedLock
-    requestedLock.addEventListener?.('release', () => {
-      if (webWakeLock === requestedLock) webWakeLock = null
-    })
-  } catch {
-    // 不支持的浏览器或系统省电策略可能拒绝该请求。
-  }
-}
-
-function shouldKeepScreenAwake() {
-  return recordingActive || awakePageOwners.size > 0
-}
-// #endif
-
-// #ifndef H5
 async function setUniKeepScreenOn(keepScreenOn: boolean) {
   nativeScreenAwakeUpdate = nativeScreenAwakeUpdate.then(
     () =>
@@ -126,4 +58,3 @@ async function setUniKeepScreenOn(keepScreenOn: boolean) {
   )
   await nativeScreenAwakeUpdate
 }
-// #endif

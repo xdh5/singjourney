@@ -152,14 +152,6 @@ function resolveLocale() {
 
 function resolveTelemetryPlatform() {
   let platform: string = CLIENT_RELEASE.platform
-  // #ifdef H5
-  platform = 'web'
-  // #endif
-  // #ifdef MP-WEIXIN
   platform = 'wx'
-  // #endif
-  // #ifdef APP-HARMONY
-  platform = 'harmony'
-  // #endif
   return platform
 }

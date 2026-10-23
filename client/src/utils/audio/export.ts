@@ -24,7 +24,6 @@ export class AudioExportTimeoutError extends Error {
 }
 
 export async function createMp3ExportFile(sourcePath: string) {
-  // #ifdef MP-WEIXIN
   if (sourcePath.toLowerCase().endsWith('.mp3')) return sourcePath
   if (activeRequest) return activeRequest
   activeRequest = encodeWavToMp3(sourcePath)
@@ -33,11 +32,6 @@ export async function createMp3ExportFile(sourcePath: string) {
   } finally {
     activeRequest = null
   }
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  return sourcePath
-  // #endif
 }
 
 async function encodeWavToMp3(sourcePath: string) {

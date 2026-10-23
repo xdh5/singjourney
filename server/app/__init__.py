@@ -1,2 +1,0 @@
-"""SingJourney API package."""
-

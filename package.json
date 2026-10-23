@@ -4,7 +4,6 @@
   "private": true,
   "workspaces": [
     "client",
-    "client/targets/*",
     "packages/*"
   ],
   "overrides": {
@@ -16,14 +15,10 @@
     "@vue/shared": "3.4.21"
   },
   "scripts": {
-    "dev:client:web": "npm run dev:h5 -w @singjourney/client",
     "dev:client:wx": "npm run dev:mp-weixin -w @singjourney/client",
     "build:core": "npm run build -w @singjourney/pitch-core && npm run build -w @singjourney/curve-layout && npm run build -w @singjourney/contracts",
     "build:client:wx": "npm run build:core && npm run build:mp-weixin -w @singjourney/client",
-    "build:client:web": "npm run build:core && npm run build:h5 -w @singjourney/client",
-    "build:client:ios": "npm run build:core && npm run build:ios -w @singjourney/client",
-    "build:client:android": "npm run build:core && npm run build:android -w @singjourney/client",
-    "build:client": "npm run build:core && npm run build:h5 -w @singjourney/client && npm run build:mp-weixin -w @singjourney/client && npm run build:ios -w @singjourney/client && npm run build:android -w @singjourney/client",
+    "build:client": "npm run build:client:wx",
     "build": "npm run build:client",
     "typecheck": "npm run typecheck -w @singjourney/client",
     "lint": "npm run lint -w @singjourney/client",

@@ -1,19 +1,8 @@
 import { defineConfig } from 'vite'
 import uni from '@dcloudio/vite-plugin-uni'
-import webRelease from './targets/web/package.json'
-import appRelease from './targets/app/package.json'
-import wxRelease from './targets/wx/package.json'
+import clientRelease from './package.json'
 
-const releaseTarget =
-  process.env.VITE_RELEASE_COMPONENT || process.env.UNI_PLATFORM || 'development'
-const releaseVersion =
-  releaseTarget === 'web' || releaseTarget === 'h5'
-    ? webRelease.version
-    : releaseTarget === 'wx' || releaseTarget === 'mp-weixin'
-      ? wxRelease.version
-      : releaseTarget === 'app' || releaseTarget === 'app-plus' || releaseTarget === 'app-harmony'
-        ? appRelease.version
-        : '0.0.0-dev'
+const releaseVersion = clientRelease.version
 
 export default defineConfig({
   define: {

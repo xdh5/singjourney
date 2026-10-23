@@ -3,7 +3,6 @@ import { wrapPcmAsWav, wrapPcmChunksAsWav } from './wav'
 const WAV_FILE_EXTENSION = '.wav'
 
 export async function persistAudio(tempFilePath: string, id: string) {
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   const fs = wxApi.getFileSystemManager()
   if (tempFilePath.toLowerCase().endsWith(WAV_FILE_EXTENSION)) {
@@ -35,19 +34,12 @@ export async function persistAudio(tempFilePath: string, id: string) {
     })
   })
   return filePath
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  const result = await uni.saveFile({ tempFilePath })
-  return result.savedFilePath
-  // #endif
 }
 
 export async function createPcmPreview(
   pcm: ArrayBuffer | readonly Uint8Array[],
   pcmByteLength?: number
 ) {
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   const filePath = `${wxApi.env.USER_DATA_PATH}/singjourney-preview-${Date.now()}.wav`
   const chunks = pcm instanceof ArrayBuffer ? [new Uint8Array(pcm)] : pcm
@@ -73,11 +65,6 @@ export async function createPcmPreview(
     byteLength: wav.byteLength
   })
   return filePath
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  throw new Error('当前平台不使用 PCM 临时试听')
-  // #endif
 }
 
 function sumChunkByteLength(chunks: readonly Uint8Array[]) {
@@ -86,23 +73,11 @@ function sumChunkByteLength(chunks: readonly Uint8Array[]) {
 
 export function deleteTemporaryAudio(filePath: string) {
   if (!filePath) return
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   wxApi.getFileSystemManager().unlink({ filePath, fail: () => {} })
-  // #endif
-
-  // #ifdef H5
-  if (filePath.startsWith('blob:')) URL.revokeObjectURL(filePath)
-  // #endif
 }
 
 export function deleteAudio(filePath: string) {
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   wxApi.getFileSystemManager().unlink({ filePath, fail: () => {} })
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  uni.removeSavedFile({ filePath, fail: () => {} })
-  // #endif
 }

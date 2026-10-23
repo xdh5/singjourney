@@ -22,9 +22,7 @@ export function createAudioExportSession() {
     isPrepared(key: string) {
       return Boolean(prepared && preparedKey === key)
     },
-    async run(
-      input: ExportAudioInput & { key: string }
-    ): Promise<ExportAudioResult> {
+    async run(input: ExportAudioInput & { key: string }): Promise<ExportAudioResult> {
       if (!prepared || preparedKey !== input.key) {
         prepared = await prepareAudioExport(input)
         preparedKey = input.key
@@ -38,13 +36,10 @@ export function createAudioExportSession() {
   }
 }
 
-export async function prepareAudioExport(
-  input: ExportAudioInput
-): Promise<PreparedAudioExport> {
+export async function prepareAudioExport(input: ExportAudioInput): Promise<PreparedAudioExport> {
   let exportPath = input.filePath
   let format: PreparedAudioExport['format'] = 'source'
 
-  // #ifdef MP-WEIXIN
   try {
     exportPath = await createMp3ExportFile(input.filePath)
     format = exportPath.toLowerCase().endsWith('.mp3') ? 'mp3' : 'source'
@@ -54,7 +49,6 @@ export async function prepareAudioExport(
     exportPath = input.filePath
     format = 'wav'
   }
-  // #endif
 
   return {
     sourcePath: input.filePath,
@@ -91,43 +85,11 @@ function confirmAudioExport(prepared: PreparedAudioExport): Promise<ExportAudioR
 }
 
 function exportAction(): 'share' | 'download' {
-  // #ifdef H5
-  return 'download'
-  // #endif
-
-  // #ifndef H5
   return 'share'
-  // #endif
 }
 
-function performPreparedAudioExport(
-  prepared: PreparedAudioExport
-): Promise<ExportAudioResult> {
-  // #ifdef H5
-  const link = document.createElement('a')
-  link.href = prepared.filePath
-  link.download = prepared.fileName
-  link.click()
-  return Promise.resolve('exported')
-  // #endif
-
-  // #ifdef MP-WEIXIN
+function performPreparedAudioExport(prepared: PreparedAudioExport): Promise<ExportAudioResult> {
   return sharePreparedAudio(prepared)
-  // #endif
-
-  // #ifdef APP-PLUS
-  return new Promise<ExportAudioResult>((resolve, reject) => {
-    ;(uni as any).shareWithSystem({
-      type: 'audio',
-      audioPaths: [prepared.filePath],
-      success: () => resolve('exported'),
-      fail: (error: unknown) => {
-        if (isExportCancellation(error)) resolve('cancelled')
-        else reject(error)
-      }
-    })
-  })
-  // #endif
 }
 
 export function sharePreparedAudio(prepared: PreparedAudioExport): Promise<ExportAudioResult> {
@@ -173,8 +135,6 @@ function safeFileName(value: string) {
 }
 
 export function hidePageShareMenu() {
-  // #ifdef MP-WEIXIN
   const wxApi = (globalThis as any).wx
   wxApi?.hideShareMenu?.({ menus: ['shareAppMessage', 'shareTimeline'] })
-  // #endif
 }

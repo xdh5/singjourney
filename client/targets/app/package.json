@@ -1,8 +1,0 @@
-{
-  "name": "@singjourney/app-release",
-  "version": "0.2.0",
-  "private": true,
-  "dependencies": {
-    "@singjourney/client": "0.2.0"
-  }
-}

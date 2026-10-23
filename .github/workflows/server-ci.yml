@@ -1,35 +1,31 @@
-name: Cloudflare 服务端发布
-
+name: 后端发布
 on:
   pull_request:
-    paths: ["server/**", "cloudflare/**", "docker/Dockerfile.cloudflare*", ".github/workflows/server-ci.yml"]
+    paths: ["server/**", "docker/Dockerfile.server*", "docker/compose.server.yml", ".github/workflows/server-ci.yml"]
   push:
     branches: [main]
-    paths: ["server/**", "cloudflare/**", "docker/Dockerfile.cloudflare*", ".github/workflows/server-ci.yml"]
+    paths: ["server/**", "docker/Dockerfile.server*", "docker/compose.server.yml", ".github/workflows/server-ci.yml"]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: cloudflare-production
   cancel-in-progress: false
-
 jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: 获取代码
+      - name: 获取源码
         uses: actions/checkout@v6
-      - name: 使用 Docker 构建
+      - name: 使用 Docker 构建后端
         run: |
-          docker build -f docker/Dockerfile.cloudflare -t singjourney-cloudflare .
-          docker run --rm singjourney-cloudflare
+          docker compose -f docker/compose.server.yml build api
+          docker compose -f docker/compose.server.yml run --rm api
       - name: 发布到 Cloudflare
         if: github.event_name != 'pull_request'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo '缺少 Cloudflare 发布令牌'; exit 1; }
-          docker run --rm -e CLOUDFLARE_API_TOKEN singjourney-cloudflare npx wrangler deploy
+          docker compose -f docker/compose.server.yml run --rm api npx wrangler deploy

@@ -22,5 +22,4 @@ export type CompletedPractice = {
   manifest: PracticeManifest
   userCurve: StoredPitchPoint[]
   recordingPath: string
-  recordingBlob?: Blob
 }
