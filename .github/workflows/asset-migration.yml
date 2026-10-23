@@ -21,7 +21,11 @@ jobs:
         run: |
           docker run --rm -e CLOUDFLARE_API_TOKEN -v "$PWD/cloudflare/public/api/v1/practice/assets:/audio:ro" singjourney-tools sh -ec '
             for file in /audio/*.opus; do
-              npx wrangler r2 object put "singjourney-practice-audio/$(basename "$file")" --file "$file" --content-type audio/ogg --remote
+              uploaded=0; for attempt in 1 2 3; do
+        if npx wrangler r2 object put "singjourney-practice-audio/$(basename "$file")" --file "$file" --content-type audio/ogg --remote; then uploaded=1; break; fi
+        sleep 2
+      done
+      test "$uploaded" = 1
             done
           '
       - name: 复用已有 Web 产物并发布独立静态服务
@@ -35,3 +39,4 @@ jobs:
           docker build -f docker/Dockerfile.cloudflare -t singjourney-api .
           docker run --rm singjourney-api
           docker run --rm -e CLOUDFLARE_API_TOKEN singjourney-api npx wrangler deploy
+
