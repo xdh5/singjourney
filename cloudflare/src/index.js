@@ -184,6 +184,23 @@ async function route(request, env) {
     const headers = new Headers(result.headers);
     headers.set('Content-Type', 'audio/ogg');
     headers.set('Cache-Control', 'public,max-age=31536000,immutable');
+    headers.set('Accept-Ranges', 'bytes');
+    const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range') || '');
+    const ifRange = request.headers.get('If-Range');
+    // 静态资源绑定未返回分段响应时补齐单段读取，保持播放器拖动兼容。
+    if (method === 'GET' && result.status === 200 && range && (!ifRange || ifRange === headers.get('ETag') || ifRange === headers.get('Last-Modified'))) {
+      const buffer = await result.arrayBuffer(), size = buffer.byteLength;
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
+      if ((!range[1] && !range[2]) || start >= size || start > end) {
+        headers.set('Content-Range', `bytes */${size}`);
+        headers.set('Content-Length', '0');
+        return new Response(null, { status: 416, headers });
+      }
+      headers.set('Content-Range', `bytes ${start}-${end}/${size}`);
+      headers.set('Content-Length', String(end - start + 1));
+      return new Response(buffer.slice(start, end + 1), { status: 206, headers });
+    }
     return new Response(result.body, { status: result.status, headers });
   }
   if (method === 'GET' && endpoint === '/practice/catalog') return json(await catalog(env, english));
