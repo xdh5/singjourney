@@ -4,6 +4,9 @@
 cloudflare/node_modules
 cloudflare/.wrangler
 cloudflare/dist
+cloudflare/public
+cloudflare/web-public
+cloudflare/src/generated.json
 cloudflare/cloudflare-api.ps1
 cloudflare/export-data.py
 !server

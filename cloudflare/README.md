@@ -1,38 +1,44 @@
 # Cloudflare 部署
 
-正式环境使用 Workers、D1 和 Workers 静态资源，不依赖腾讯云服务器、PostgreSQL 托管或对象存储。
+正式环境的接口、数据库、音频和 Web 分别部署，仓库只保存源码与配置。
 
-2026 年 10 月 23 日迁移：完整保留 8 个用户、8 条微信身份、14 条登录会话、138 条练声记录和 5 个收藏，其余业务表也完整迁移。最终冻结快照与导入快照的数据行一致。
+| 内容 | 保存位置 |
+| --- | --- |
+| 用户、微信身份、登录会话、练声记录和收藏 | D1 数据库 `singjourney` |
+| 练声音频母带 | 私有 R2 桶 `singjourney-practice-audio` |
+| Web 构建产物 | 独立静态服务 `singjourney-web` |
+| 接口代码 | Workers 服务 `singjourney` |
 
-## 资源与兼容性
+接口服务绑定 `DB`、`AUDIO` 和 `WEB`。Web 请求通过内部服务绑定转发；音频由接口直接从 R2 流式返回，保留原路径 `/api/v1/practice/assets/文件名`、缓存与字节范围读取。原域名和小程序白名单保持不变。
 
-- 域名保持 `singjourney.com`，接口保持 `/api/v1`。
-- D1 绑定名为 `DB`，保留用户 ID、微信身份、登录会话、收藏和练声记录。
-- 乐谱继续由现有 Python 实现生成，Workers 根据音域裁剪权威乐谱，音频使用已有母带。
-- `public/` 内放 Web 已有产物，`public/api/v1/practice/assets/` 放练声母带。
-- 这些静态文件和 `src/generated.json` 是已验收发布快照，纳入版本管理。更新 Web 时需先更新快照再发布；日常微信改动不构建 Web。
-- 密钥使用 Workers Secrets：`WECHAT_APP_ID`、`WECHAT_APP_SECRET`；禁止提交密钥和用户数据。
+## 构建和发布
 
-## Docker 构建
+全部使用 Docker，不运行本机 npm、Vite 或 Python 构建。
+
+- 接口：GitHub Actions 在推送源码后构建并直接发布 Workers，构建期间使用 `generate-scores.py` 从现有 Python 乐谱源码生成 JSON，不渲染音频、不提交生成文件。
+- Web：手动触发“Web 构建与发布”，使用 Docker 仅构建 Web，然后直接发布到 `singjourney-web`；不会覆盖接口或音频。
+- 音频：仅当资源生成器或输入资源变化时使用既有 `practice-assets` 服务生成，然后通过 R2 上传命令发布。平时修改接口不重新生成或上传音频。
+
+本地构建接口：
 
 ```powershell
-docker compose -f docker/compose.cloudflare.yml run --build --rm cloudflare
+ docker compose -f docker/compose.cloudflare.yml run --build --rm cloudflare
 ```
 
-部署时用同一服务执行 `npx wrangler deploy`。迁移不会触发 Web 或四端重新构建。
+使用已配置凭据的发布容器上传母带：
 
-## 数据迁移
+```sh
+npx wrangler r2 object put singjourney-practice-audio/文件名.opus --file /音频目录/文件名.opus --content-type audio/ogg --remote
+```
 
-`export-data.py` 在旧 API 容器内运行，以只读一致性快照导出完整表结构和数据到 `/tmp/migration.sql`，同时导出权威乐谱到 `/tmp/generated.json`。
+此命令只在 Docker 容器内执行。R2 不开放公共桶地址，音频仍由原域名提供访问。
 
-先保存 PostgreSQL 完整备份，再将 SQL 导入新的空 D1 数据库。用户数据备份仅存于忽略目录 `.migration/`，不进入 Git。
+## 凭据与数据备份
 
-最终切换需暂停旧 API 写入、导出最终快照并核对所有表数量，再绑定正式域名。保留旧服务器备份直到人工验收完成。数据库回退必须包含切换后的新增数据，禁止直接恢复旧快照覆盖新写入。
+GitHub Actions 使用 `CLOUDFLARE_API_TOKEN`；权限涵盖 Workers 发布、R2 对象上传及必要的 D1 访问。微信密钥只保存在接口服务的 Workers Secrets 中。
 
-## 配额
+2026 年 10 月 23 日迁移时保留了 8 个用户、8 条微信身份、14 条登录会话、138 条练声记录和 5 个收藏。用户数据没有进入 Git。
 
-Workers 免费方案包含每天十万次请求和每请求十毫秒 CPU；D1 免费额度按读写行数计费限制。当前不使用 R2。域名费用单独续费。
+`.migration/` 保存本地迁移备份和清理前 Git 恢复包，已被 Git 忽略。禁止将用户数据库备份、凭据、Web 产物、音频产物或生成的乐谱 JSON 提交到仓库。
 
-## 发布凭据
-
-GitHub Actions 使用 `CLOUDFLARE_API_TOKEN`，权限应仅覆盖目标账号的 Workers 脚本、静态资源发布和 D1 读写。正式域名绑定只在初次切换执行。禁止把临时 OAuth 令牌配置成长期 CI 凭据。
+R2 使用标准存储免费额度；超出存储和操作额度可能收费。域名仍单独续费。
